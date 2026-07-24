@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#102b27" />
+    <meta name="description" content="CityUber turns Port Moresby transport stops into the floors of a city-scale elevator simulation." />
+    <link rel="icon" href="/public/favicon.svg" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <title>CityUber — Port Moresby in motion</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="CityUber home">
+          <span class="brand-icon">↟</span>
+          <span><strong>CityUber</strong><small>Port Moresby city lift</small></span>
+        </a>
+        <div class="time-display"><span>Simulation tick</span><strong id="time-value">0</strong><span id="duration-value">/ 0</span></div>
+        <div class="run-controls">
+          <button id="start-button" class="button primary">▶ Run</button>
+          <button id="pause-button" class="button">Pause</button>
+          <button id="step-button" class="button">Step</button>
+          <button id="reset-button" class="button icon" title="Reset">↺</button>
+          <label class="speed-control">Speed <select id="speed-select"><option value="850">Calm</option><option value="450" selected>Normal</option><option value="180">Fast</option></select></label>
+        </div>
+      </header>
+
+      <section class="metric-strip" aria-label="Live performance metrics">
+        <article><span>People moved</span><strong id="transported-metric">0</strong><small id="transported-goal">goal 0</small></article>
+        <article><span>Average wait</span><strong id="wait-metric">0.0</strong><small>ticks</small></article>
+        <article><span>Energy</span><strong id="energy-metric">0.0</strong><small id="energy-goal">budget 0</small></article>
+        <article class="score-card"><span>City score</span><strong id="score-metric">0</strong><small>/ 100</small></article>
+      </section>
+
+      <main class="workspace">
+        <section class="map-panel">
+          <div class="section-heading">
+            <div><p class="eyebrow">The horizontal tower</p><h1>Port Moresby service map</h1></div>
+            <div class="legend"><span><i class="dot stop"></i>Stop / floor</span><span><i class="dot vehicle"></i>CityLift</span><span><i class="dot traffic"></i>Traffic</span></div>
+          </div>
+          <div class="map-frame">
+            <svg id="city-map" role="img" aria-label="Stylized Port Moresby transport map" viewBox="0 0 850 600"></svg>
+          </div>
+          <p id="accuracy-note" class="accuracy-note"></p>
+        </section>
+
+        <aside class="control-panel">
+          <section>
+            <div class="section-heading compact"><div><p class="eyebrow">Elevator cars</p><h2>CityLift fleet</h2></div><span class="live-badge">● live</span></div>
+            <div id="vehicle-list" class="vehicle-list"></div>
+          </section>
+
+          <section class="floor-section">
+            <div class="section-heading compact"><div><p class="eyebrow">Floor-call panel</p><h2>Dispatch selected lift</h2></div></div>
+            <p class="hint">Choose a CityLift above, then send it to a named stop.</p>
+            <div id="stop-panel" class="stop-panel"></div>
+          </section>
+
+          <section>
+            <div class="section-heading compact"><div><p class="eyebrow">Calls waiting</p><h2>Passenger queue</h2></div><span id="waiting-count" class="count-pill">0</span></div>
+            <div id="waiting-list" class="waiting-list"></div>
+          </section>
+        </aside>
+      </main>
+
+      <section class="event-drawer">
+        <div class="section-heading compact"><div><p class="eyebrow">Operations</p><h2>Dispatch log</h2></div></div>
+        <div id="event-log" class="event-log" aria-live="polite"></div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

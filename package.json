@@ -1,0 +1,15 @@
+{
+  "name": "cityuber",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An elevator-inspired public transport simulation on a stylized Port Moresby map.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "license": "MIT"
+}
