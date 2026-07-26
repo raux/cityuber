@@ -11,5 +11,8 @@
   "engines": {
     "node": ">=22.19"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.82.1"
+  }
 }

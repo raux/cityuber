@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import { CityUberSimulation } from '../src/engine.js'
 import { roadKey } from '../src/routing.js'
-import { createStrategy } from '../src/strategy.js'
+import { createDifficultyStrategy, createStrategy } from '../src/strategy.js'
 
 const scenario = JSON.parse(await readFile(new URL('../scenarios/morning-rush.json', import.meta.url), 'utf8'))
 
@@ -13,6 +13,14 @@ test('every named stop and vehicle depot is on the road network', () => {
   const stopById = new Map(scenario.stops.map((stop) => [stop.id, stop]))
   for (const stop of scenario.stops) assert.ok(roads.has(roadKey(stop.position)), `${stop.name} must be on a road`)
   for (const vehicle of scenario.vehicles) assert.ok(stopById.has(vehicle.startStop), `${vehicle.name} must start at a known stop`)
+})
+
+test('morning rush initializes ten unique ambient traffic cars', () => {
+  const game = new CityUberSimulation(scenario, createStrategy())
+  const state = game.snapshot()
+  assert.equal(state.trafficCars.length, 10)
+  const positions = state.trafficCars.map((car) => roadKey(car.position))
+  assert.equal(new Set(positions).size, positions.length)
 })
 
 test('passenger requests use known, distinct stops', () => {
@@ -25,16 +33,17 @@ test('passenger requests use known, distinct stops', () => {
   }
 })
 
-test('the complete morning scenario is deterministic and meets its objectives', () => {
+test('the competitive morning scenario produces deterministic algorithmic fleets', () => {
   const run = () => {
-    const game = new CityUberSimulation(scenario, createStrategy())
+    const game = new CityUberSimulation(scenario, createDifficultyStrategy('medium'))
     while (!game.isFinished()) game.step()
-    return game.score()
+    const state = game.snapshot()
+    return { score: state.score, competition: state.competition }
   }
   const first = run()
   const second = run()
   assert.deepEqual(first, second)
-  assert.equal(first.completedRequests, scenario.requests.length)
-  assert.equal(first.transported, 59)
-  assert.equal(first.passed, true)
+  assert.ok(first.competition.metrics.ai.transported > 0)
+  assert.ok(first.competition.metrics.human.transported > 0)
+  assert.ok(['human', 'ai', 'tie'].includes(first.competition.winner))
 })

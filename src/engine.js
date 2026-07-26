@@ -1,4 +1,4 @@
-import { findRoute, roadKey, samePosition } from './routing.js'
+import { findRoute, roadConnections, roadKey, samePosition } from './routing.js'
 
 export class CityUberSimulation {
   constructor(scenario, strategy) {
@@ -11,13 +11,28 @@ export class CityUberSimulation {
   reset() {
     this.time = 0
     this.events = []
+    this.competitionEnabled = this.scenario.competition?.enabled === true
     this.traffic = {}
+    this.trafficLightRules = {
+      phaseDuration: 4,
+      updateInterval: 12,
+      initialCount: 0,
+      maxActive: 4,
+      dynamic: false,
+      ...(this.scenario.trafficLightRules ?? {}),
+    }
+    this.trafficLightCandidates = this.scenario.roads
+      .filter((position) => roadConnections(position, this.scenario.roads).length >= 3)
+      .map((position) => [...position])
+    this.trafficLights = {}
+    this.#initializeTrafficLights()
     this.requests = this.scenario.requests.map((request, index) => ({
       id: `request-${index + 1}`,
       status: 'pending',
       remaining: request.passengers,
       delivered: 0,
       ...structuredClone(request),
+      deliveredByOperator: {},
     }))
     this.pending = [...this.requests].sort((left, right) => left.at - right.at)
     this.waiting = []
@@ -25,6 +40,8 @@ export class CityUberSimulation {
       const start = this.#stop(vehicle.startStop)
       return {
         ...structuredClone(vehicle),
+        operator: vehicle.operator ?? (this.competitionEnabled ? 'human' : 'system'),
+        humanAlgorithm: vehicle.humanAlgorithm ?? 'nearest',
         position: [...start.position],
         currentStopId: start.id,
         targetStopId: null,
@@ -33,6 +50,9 @@ export class CityUberSimulation {
         outOfService: false,
       }
     })
+    const operatorIds = this.competitionEnabled ? ['human', 'ai'] : [...new Set(this.vehicles.map((vehicle) => vehicle.operator))]
+    this.operatorMetrics = Object.fromEntries(operatorIds.map((operator) => [operator, blankOperatorMetrics()]))
+    this.trafficCars = this.#createTrafficCars()
     this.metrics = {
       transported: 0,
       completedRequests: 0,
@@ -51,10 +71,20 @@ export class CityUberSimulation {
     this.strategy = strategy
   }
 
-  dispatch(vehicleId, stopId) {
+  setHumanAlgorithm(vehicleId, algorithm) {
+    const allowed = new Set(['nearest', 'oldest', 'accessibility', 'energy'])
+    const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
+    if (!vehicle || vehicle.operator !== 'human' || !allowed.has(algorithm)) return false
+    vehicle.humanAlgorithm = algorithm
+    return true
+  }
+
+  dispatch(vehicleId, stopId, source = 'human') {
     const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
     const stop = this.stopById.get(stopId)
     if (!vehicle || !stop || vehicle.outOfService) return false
+    if (this.competitionEnabled && source === 'human' && vehicle.operator !== 'human') return false
+    if (this.competitionEnabled && source === 'ai' && vehicle.operator !== 'ai') return false
     if (samePosition(vehicle.position, stop.position)) {
       vehicle.currentStopId = stop.id
       vehicle.targetStopId = null
@@ -65,7 +95,7 @@ export class CityUberSimulation {
     if (!route.length) return false
     vehicle.targetStopId = stop.id
     vehicle.route = route
-    this.events.push({ type: 'dispatch', vehicleId, stopId })
+    this.events.push({ type: 'dispatch', vehicleId, stopId, operator: vehicle.operator })
     return true
   }
 
@@ -74,19 +104,29 @@ export class CityUberSimulation {
     if (this.isFinished()) return this.snapshot()
 
     this.#expireTraffic()
+    this.#updateTrafficLights()
     this.#spawnRequests()
     this.#startTrafficEvents()
 
     for (const vehicle of this.vehicles) this.#serviceCurrentStop(vehicle)
 
-    const decisions = this.strategy?.decide(this.snapshot()) ?? {}
+    if (this.competitionEnabled) {
+      const humanDecisions = this.#decideHumanDispatches()
+      for (const [vehicleId, stopId] of Object.entries(humanDecisions)) this.dispatch(vehicleId, stopId, 'human')
+    }
+
+    const decisionState = this.snapshot()
+    if (this.competitionEnabled) decisionState.vehicles = decisionState.vehicles.filter((vehicle) => vehicle.operator === 'ai')
+    const decisions = this.strategy?.decide(decisionState) ?? {}
     for (const vehicle of this.vehicles) {
+      if (this.competitionEnabled && vehicle.operator !== 'ai') continue
       if (!vehicle.route.length && !vehicle.targetStopId && decisions[vehicle.id]) {
-        this.dispatch(vehicle.id, decisions[vehicle.id])
+        this.dispatch(vehicle.id, decisions[vehicle.id], this.competitionEnabled ? 'ai' : 'system')
       }
     }
 
-    for (const vehicle of this.vehicles) this.#moveVehicle(vehicle)
+    this.#planTrafficCars()
+    this.#moveVehicles()
     this.time += 1
     return this.snapshot()
   }
@@ -147,12 +187,18 @@ export class CityUberSimulation {
       scenario: this.scenario,
       time: this.time,
       vehicles: this.vehicles,
+      trafficCars: this.trafficCars,
       requests: this.requests,
       waiting: this.waiting.map((request) => ({ ...request, waited: this.time - request.at })),
       traffic: this.traffic,
+      trafficLights: Object.fromEntries(Object.entries(this.trafficLights).map(([key, light]) => [key, {
+        ...light,
+        phase: this.#trafficLightPhase(light),
+      }])),
       events: this.events,
       metrics: this.metrics,
       score: this.score(),
+      competition: this.#competitionSnapshot(),
       finished: this.isFinished(),
     })
   }
@@ -177,6 +223,7 @@ export class CityUberSimulation {
 
   #unload(vehicle, stopId) {
     const staying = []
+    const operatorMetrics = this.operatorMetrics[vehicle.operator]
     for (const group of vehicle.passengers) {
       if (group.to !== stopId) {
         staying.push(group)
@@ -185,20 +232,27 @@ export class CityUberSimulation {
       const request = this.requests.find((candidate) => candidate.id === group.requestId)
       if (request) {
         request.delivered += group.count
+        request.deliveredByOperator[vehicle.operator] = (request.deliveredByOperator[vehicle.operator] ?? 0) + group.count
         if (request.delivered >= request.passengers) {
           request.status = 'completed'
           this.metrics.completedRequests += 1
         }
       }
       this.metrics.transported += group.count
-      if (group.requiresAccessible) this.metrics.accessibleTransported += group.count
-      this.events.push({ type: 'exit', vehicleId: vehicle.id, stopId, requestId: group.requestId, count: group.count })
+      operatorMetrics.transported += group.count
+      if (group.type === 'priority') operatorMetrics.priorityTransported += group.count
+      if (group.requiresAccessible) {
+        this.metrics.accessibleTransported += group.count
+        operatorMetrics.accessibleTransported += group.count
+      }
+      this.events.push({ type: 'exit', vehicleId: vehicle.id, operator: vehicle.operator, stopId, requestId: group.requestId, count: group.count })
     }
     vehicle.passengers = staying
   }
 
   #board(vehicle, stopId) {
     let available = vehicle.capacity - onboardCount(vehicle)
+    const operatorMetrics = this.operatorMetrics[vehicle.operator]
     if (available <= 0) return
 
     const candidates = this.waiting
@@ -215,6 +269,7 @@ export class CityUberSimulation {
         count,
         type: request.type,
         requiresAccessible: request.requiresAccessible === true,
+        operator: vehicle.operator,
         boardedAt: this.time,
       })
       request.remaining -= count
@@ -222,38 +277,274 @@ export class CityUberSimulation {
       available -= count
       this.metrics.totalWait += wait * count
       this.metrics.maxWait = Math.max(this.metrics.maxWait, wait)
+      operatorMetrics.boarded += count
+      operatorMetrics.totalWait += wait * count
+      operatorMetrics.maxWait = Math.max(operatorMetrics.maxWait, wait)
       const stopWait = this.metrics.stopWaits[stopId] ?? { total: 0, count: 0 }
       stopWait.total += wait * count
       stopWait.count += count
       this.metrics.stopWaits[stopId] = stopWait
-      this.events.push({ type: 'board', vehicleId: vehicle.id, stopId, requestId: request.id, count })
+      this.events.push({ type: 'board', vehicleId: vehicle.id, operator: vehicle.operator, stopId, requestId: request.id, count })
     }
     this.waiting = this.waiting.filter((request) => request.remaining > 0)
   }
 
-  #moveVehicle(vehicle) {
-    if (vehicle.outOfService || !vehicle.route.length) return
-    const next = vehicle.route[0]
-    const congestion = this.traffic[roadKey(next)]
-    if (congestion && this.time % (congestion.severity + 1) !== 0) {
-      this.events.push({ type: 'traffic-delay', vehicleId: vehicle.id, position: [...next] })
-      return
+  #decideHumanDispatches() {
+    const decisions = {}
+    for (const vehicle of this.vehicles.filter((candidate) => candidate.operator === 'human')) {
+      if (vehicle.outOfService || vehicle.route.length || vehicle.targetStopId) continue
+      const algorithm = vehicle.humanAlgorithm
+      if (vehicle.passengers.length) {
+        let groups = [...vehicle.passengers]
+        if (algorithm === 'oldest') groups.sort((left, right) => left.boardedAt - right.boardedAt)
+        else if (algorithm === 'accessibility') groups.sort((left, right) => Number(right.requiresAccessible) - Number(left.requiresAccessible) || left.boardedAt - right.boardedAt)
+        else groups.sort((left, right) => this.#distanceToStop(vehicle, left.to) - this.#distanceToStop(vehicle, right.to))
+        decisions[vehicle.id] = groups[0].to
+        continue
+      }
+
+      let requests = this.waiting.filter((request) => !request.requiresAccessible || vehicle.accessible)
+      if (!requests.length) continue
+      if (algorithm === 'oldest') {
+        requests = requests.sort((left, right) => left.at - right.at || this.#distanceToStop(vehicle, left.from) - this.#distanceToStop(vehicle, right.from))
+      } else if (algorithm === 'accessibility') {
+        requests = requests.sort((left, right) => Number(right.requiresAccessible) - Number(left.requiresAccessible) || Number(right.priority) - Number(left.priority) || left.at - right.at)
+      } else if (algorithm === 'energy') {
+        requests = requests.sort((left, right) => {
+          const leftLoad = Math.max(1, Math.min(vehicle.capacity, left.remaining))
+          const rightLoad = Math.max(1, Math.min(vehicle.capacity, right.remaining))
+          return this.#distanceToStop(vehicle, left.from) / leftLoad - this.#distanceToStop(vehicle, right.from) / rightLoad
+        })
+      } else {
+        requests = requests.sort((left, right) => this.#distanceToStop(vehicle, left.from) - this.#distanceToStop(vehicle, right.from) || left.at - right.at)
+      }
+      decisions[vehicle.id] = requests[0].from
+    }
+    return decisions
+  }
+
+  #distanceToStop(vehicle, stopId) {
+    const stop = this.stopById.get(stopId)
+    if (!stop) return Number.POSITIVE_INFINITY
+    if (samePosition(vehicle.position, stop.position)) return 0
+    const route = findRoute(vehicle.position, stop.position, this.scenario.roads, this.traffic, true)
+    return route.length || Number.POSITIVE_INFINITY
+  }
+
+  #createTrafficCars() {
+    const requestedCount = Math.max(0, Math.floor(Number(this.scenario.ambientTraffic?.count) || 0))
+    const fleetPositions = new Set(this.vehicles.map((vehicle) => roadKey(vehicle.position)))
+    const available = this.scenario.roads.filter((position) => !fleetPositions.has(roadKey(position))).map((position) => [...position])
+    const count = Math.min(requestedCount, available.length)
+    const cars = []
+    for (let index = 0; index < count; index += 1) {
+      const selectedIndex = deterministicIndex(`${this.scenario.id}:traffic-car:${index}:start`, available.length)
+      const [position] = available.splice(selectedIndex, 1)
+      cars.push({
+        id: `traffic-car-${index + 1}`,
+        name: `Traffic car ${index + 1}`,
+        position,
+        destination: null,
+        route: [],
+        trip: 0,
+        blockedTicks: 0,
+        colorIndex: deterministicIndex(`${this.scenario.id}:traffic-car:${index}:color`, 6),
+      })
+    }
+    return cars
+  }
+
+  #planTrafficCars() {
+    for (const car of this.trafficCars) {
+      if (car.route.length) continue
+      const destinations = this.scenario.roads.filter((position) => !samePosition(position, car.position))
+      if (!destinations.length) continue
+      const startIndex = deterministicIndex(`${this.scenario.id}:${car.id}:trip:${car.trip}`, destinations.length)
+      for (let offset = 0; offset < destinations.length; offset += 1) {
+        const destination = destinations[(startIndex + offset) % destinations.length]
+        const route = findRoute(car.position, destination, this.scenario.roads, this.traffic, true)
+        if (!route.length) continue
+        car.destination = [...destination]
+        car.route = route
+        car.trip += 1
+        break
+      }
+    }
+  }
+
+  #moveVehicles() {
+    const actors = [
+      ...this.vehicles.map((actor) => ({ actor, kind: 'fleet' })),
+      ...this.trafficCars.map((actor) => ({ actor, kind: 'traffic' })),
+    ]
+    const occupied = new Map(actors
+      .filter(({ actor, kind }) => kind !== 'fleet' || !this.#isFleetOffRoad(actor))
+      .map(({ actor }) => [roadKey(actor.position), actor.id]))
+    const intents = new Map()
+
+    for (const { actor, kind } of actors) {
+      if (actor.outOfService || !actor.route.length) continue
+      const next = actor.route[0]
+      const nextKey = roadKey(next)
+      const congestion = this.traffic[nextKey]
+      if (congestion && this.time % (congestion.severity + 1) !== 0) {
+        if (kind === 'fleet') this.events.push({ type: 'traffic-delay', vehicleId: actor.id, position: [...next] })
+        continue
+      }
+      const light = this.trafficLights[nextKey]
+      const movementAxis = next[0] !== actor.position[0] ? 'horizontal' : 'vertical'
+      if (light && this.#trafficLightPhase(light) !== movementAxis) {
+        if (kind === 'fleet') this.events.push({ type: 'traffic-light-wait', vehicleId: actor.id, position: [...next], phase: this.#trafficLightPhase(light) })
+        continue
+      }
+      intents.set(actor.id, { actor, kind, next: [...next], nextKey })
     }
 
+    const reservedDestinations = new Map()
+    for (const [actorId, intent] of [...intents]) {
+      const winner = reservedDestinations.get(intent.nextKey)
+      if (winner) {
+        intents.delete(actorId)
+        this.#recordCollisionDelay(intent, winner)
+      } else {
+        reservedDestinations.set(intent.nextKey, actorId)
+      }
+    }
+
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const [actorId, intent] of [...intents]) {
+        const occupantId = occupied.get(intent.nextKey)
+        if (!occupantId || occupantId === actorId || intents.has(occupantId)) continue
+        intents.delete(actorId)
+        this.#recordCollisionDelay(intent, occupantId)
+        changed = true
+      }
+    }
+
+    for (const { actor, kind, next } of intents.values()) {
+      if (kind === 'fleet') this.#applyVehicleMove(actor, next)
+      else this.#applyTrafficCarMove(actor, next)
+    }
+  }
+
+  #recordCollisionDelay(intent, blockedBy) {
+    if (intent.kind === 'fleet') {
+      this.events.push({ type: 'collision-wait', vehicleId: intent.actor.id, blockedBy, position: [...intent.next] })
+      return
+    }
+    intent.actor.blockedTicks += 1
+    if (intent.actor.blockedTicks < 3) return
+    intent.actor.route = []
+    intent.actor.destination = null
+    intent.actor.blockedTicks = 0
+  }
+
+  #isFleetOffRoad(vehicle) {
+    return Boolean(vehicle.currentStopId)
+      && !vehicle.targetStopId
+      && !vehicle.route.length
+  }
+
+  #applyVehicleMove(vehicle, next) {
     vehicle.position = [...next]
     vehicle.currentStopId = null
     vehicle.route.shift()
     this.metrics.energy += vehicle.energyPerStep
-    this.events.push({ type: 'move', vehicleId: vehicle.id, position: [...vehicle.position] })
+    this.operatorMetrics[vehicle.operator].energy += vehicle.energyPerStep
+    this.events.push({ type: 'move', vehicleId: vehicle.id, operator: vehicle.operator, position: [...vehicle.position] })
 
     if (!vehicle.route.length) {
       const arrivedStop = this.stopById.get(vehicle.targetStopId)
       if (arrivedStop && samePosition(vehicle.position, arrivedStop.position)) {
         vehicle.currentStopId = arrivedStop.id
-        this.events.push({ type: 'arrive', vehicleId: vehicle.id, stopId: arrivedStop.id })
+        this.events.push({ type: 'arrive', vehicleId: vehicle.id, operator: vehicle.operator, stopId: arrivedStop.id })
       }
       vehicle.targetStopId = null
     }
+  }
+
+  #applyTrafficCarMove(car, next) {
+    car.position = [...next]
+    car.blockedTicks = 0
+    car.route.shift()
+    if (!car.route.length) car.destination = null
+  }
+
+  #competitionSnapshot() {
+    if (!this.competitionEnabled) return { enabled: false }
+    const scores = {
+      human: operatorScore(this.operatorMetrics.human),
+      ai: operatorScore(this.operatorMetrics.ai),
+    }
+    const leader = scores.human === scores.ai ? 'tie' : scores.human > scores.ai ? 'human' : 'ai'
+    return {
+      enabled: true,
+      metrics: this.operatorMetrics,
+      scores,
+      leader,
+      winner: this.isFinished() ? leader : null,
+    }
+  }
+
+  #initializeTrafficLights() {
+    for (const configured of this.scenario.trafficLights ?? []) {
+      const key = roadKey(configured.position)
+      if (!this.trafficLightCandidates.some((position) => roadKey(position) === key)) continue
+      this.trafficLights[key] = {
+        id: configured.id ?? `signal-${key}`,
+        position: [...configured.position],
+        phaseOffset: Number(configured.phaseOffset) || 0,
+        createdAt: 0,
+      }
+    }
+    while (Object.keys(this.trafficLights).length < this.trafficLightRules.initialCount) {
+      if (!this.#addRandomTrafficLight(`initial-${Object.keys(this.trafficLights).length}`, false)) break
+    }
+  }
+
+  #updateTrafficLights() {
+    const interval = Number(this.trafficLightRules.updateInterval)
+    if (!this.trafficLightRules.dynamic || interval <= 0 || this.time === 0 || this.time % interval !== 0) return
+    const cycle = Math.floor(this.time / interval)
+    const activeCount = Object.keys(this.trafficLights).length
+    if (cycle % 2 === 1 && activeCount < this.trafficLightRules.maxActive) {
+      this.#addRandomTrafficLight(`add-${this.time}`, true)
+    } else if (activeCount > 0) {
+      this.#removeRandomTrafficLight(`remove-${this.time}`)
+    }
+  }
+
+  #addRandomTrafficLight(salt, emitEvent) {
+    const available = this.trafficLightCandidates.filter((position) => !this.trafficLights[roadKey(position)])
+    if (!available.length) return false
+    const position = available[deterministicIndex(`${this.scenario.id}:${salt}:position`, available.length)]
+    const key = roadKey(position)
+    const cycleLength = Math.max(2, Number(this.trafficLightRules.phaseDuration) * 2)
+    const light = {
+      id: `signal-${key}`,
+      position: [...position],
+      phaseOffset: deterministicIndex(`${this.scenario.id}:${salt}:phase`, cycleLength),
+      createdAt: this.time,
+    }
+    this.trafficLights[key] = light
+    if (emitEvent) this.events.push({ type: 'traffic-light-added', lightId: light.id, position: [...position] })
+    return true
+  }
+
+  #removeRandomTrafficLight(salt) {
+    const active = Object.values(this.trafficLights).sort((left, right) => left.id.localeCompare(right.id))
+    if (!active.length) return false
+    const light = active[deterministicIndex(`${this.scenario.id}:${salt}`, active.length)]
+    delete this.trafficLights[roadKey(light.position)]
+    this.events.push({ type: 'traffic-light-removed', lightId: light.id, position: [...light.position] })
+    return true
+  }
+
+  #trafficLightPhase(light) {
+    const duration = Math.max(1, Number(this.trafficLightRules.phaseDuration) || 4)
+    return Math.floor((this.time + light.phaseOffset) / duration) % 2 === 0 ? 'horizontal' : 'vertical'
   }
 
   #startTrafficEvents() {
@@ -278,6 +569,38 @@ export class CityUberSimulation {
     if (!stop) throw new Error(`Unknown stop: ${id}`)
     return stop
   }
+}
+
+function blankOperatorMetrics() {
+  return {
+    transported: 0,
+    priorityTransported: 0,
+    accessibleTransported: 0,
+    boarded: 0,
+    totalWait: 0,
+    maxWait: 0,
+    energy: 0,
+  }
+}
+
+function operatorScore(metrics) {
+  const averageWait = metrics.boarded ? metrics.totalWait / metrics.boarded : 0
+  const points = metrics.transported * 4
+    + metrics.priorityTransported * 1.5
+    + metrics.accessibleTransported * 2
+    - averageWait * 0.6
+    - metrics.energy * 0.08
+  return Math.round(Math.max(0, points) * 10) / 10
+}
+
+function deterministicIndex(seed, length) {
+  if (length <= 0) return 0
+  let hash = 2166136261
+  for (const character of String(seed)) {
+    hash ^= character.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0) % length
 }
 
 export function onboardCount(vehicle) {

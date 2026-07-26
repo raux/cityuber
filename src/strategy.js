@@ -14,6 +14,36 @@ export const defaultStrategyConfig = Object.freeze({
   energySaving: false,
 })
 
+export const aiDifficultyConfigs = Object.freeze({
+  easy: Object.freeze({
+    ...defaultStrategyConfig,
+    strategyMode: 'chaos',
+    priorityWeight: 4,
+    queueAgeWeight: 1,
+    distanceWeight: 7,
+    occupancyWeight: 1,
+    accessibilityWeight: 8,
+    maxActiveVehicles: 2,
+  }),
+  medium: Object.freeze({
+    ...defaultStrategyConfig,
+    maxActiveVehicles: 2,
+  }),
+  hard: Object.freeze({
+    ...defaultStrategyConfig,
+    priorityWeight: 18,
+    queueAgeWeight: 3.5,
+    distanceWeight: 2,
+    occupancyWeight: 3,
+    accessibilityWeight: 20,
+    maxActiveVehicles: 2,
+  }),
+})
+
+export function createDifficultyStrategy(level = 'medium') {
+  return createStrategy(aiDifficultyConfigs[level] ?? aiDifficultyConfigs.medium)
+}
+
 export function normalizeStrategyConfig(config = {}, limits = {}) {
   const stopIds = new Set(limits.stopIds ?? [])
   const maxVehicles = Math.max(1, limits.vehicleCount ?? 12)

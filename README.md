@@ -8,8 +8,19 @@ CityUber is an elevator-inspired public-transport simulation on a stylized Port 
 
 - Eight named Port Moresby-inspired stops
 - Connected road network and traffic-aware shortest paths
-- Three CityLift vehicles with different capacities and accessibility
+- Two human CityLifts controlled by selectable algorithms and a conversational Pi fleet agent
 - Passenger calls, waiting, partial boarding, travel, and exiting
+- Animated human figures for new queues, boarding, and exiting
+- SVG car, shuttle, and minibus silhouettes with visible onboard passengers
+- Direction-aware vehicle motion with smooth horizontal/vertical turns
+- Collision-safe intersection reservations so vehicles yield instead of overlapping
+- Phase-based traffic lights that stop horizontal or vertical traffic on red
+- Deterministic dynamic traffic lights that are added and removed during a run
+- Ten seeded ambient cars that circulate continuously and create realistic congestion
+- Rival Operators scoring with separate delivery, waiting, accessibility, and energy results
+- Tool-free server-side Pi chat for conversation, dispatch instructions, and algorithm changes
+- Nearest-call, oldest-call, accessibility-priority, and energy-saving human fleet controls
+- Easy, Medium, and Hard deterministic rival AI strategy presets
 - Multiple onboard destinations
 - Automated elevator-style dispatch
 - Manual floor-call panel for sending a selected vehicle to a stop
@@ -40,6 +51,12 @@ npm start
 
 Open <http://127.0.0.1:4190/>.
 
+The Pi fleet chat prefers the lightweight local LM Studio model `google/gemma-4-e2b` when available, then falls back to another configured Pi model. Override selection with a full provider/model key:
+
+```bash
+CITYUBER_PI_MODEL=lmstudio/google/gemma-4-e2b npm start
+```
+
 ## Test
 
 ```bash
@@ -50,13 +67,13 @@ npm test
 
 The deterministic simulation lives in `src/engine.js`. Routing is isolated in `src/routing.js`, and the bounded dispatcher lives in `src/strategy.js`. Scenario data remains declarative under `scenarios/`.
 
-The browser can manually dispatch a vehicle to a named stop, but the engine retains control of road routing, traffic delays, boarding, capacity, and metrics.
+Human vehicles run selected deterministic algorithms, while the server-side Pi fleet agent can discuss the game and submit validated dispatch or algorithm-change actions. The engine retains control of road routing, traffic delays, boarding, capacity, and metrics.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the next Pi-assisted phase.
 
 ## Privacy and AI boundary
 
-The MVP does not call an AI provider. A future phase will adapt Tower Agents’ Pi workflow so models can propose only validated strategy configuration. Candidates will be evaluated deterministically and require human approval before activation.
+Pi credentials remain server-side and are never exposed to the browser. The embedded chat session has no shell, filesystem, or coding tools; its output is restricted to conversational text plus validated human-fleet dispatch and algorithm actions. Deterministic engine evaluation remains separate from model conversation.
 
 ## Attribution
 

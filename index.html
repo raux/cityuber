@@ -22,9 +22,25 @@
           <button id="pause-button" class="button">Pause</button>
           <button id="step-button" class="button">Step</button>
           <button id="reset-button" class="button icon" title="Reset">↺</button>
+          <label class="difficulty-control">AI <select id="difficulty-select"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></label>
           <label class="speed-control">Speed <select id="speed-select"><option value="850">Calm</option><option value="450" selected>Normal</option><option value="180">Fast</option></select></label>
         </div>
       </header>
+
+      <section class="rival-scoreboard" aria-label="Human versus AI competition score">
+        <article class="rival-team human-team">
+          <span class="team-kicker">You · manual dispatch</span>
+          <strong id="human-rival-score">0.0</strong>
+          <small><b id="human-rival-transported">0</b> delivered · <b id="human-rival-wait">0.0</b> avg wait</small>
+        </article>
+        <div class="rival-center"><span>Rival operators</span><strong>VS</strong><small id="rival-status">Level score</small></div>
+        <article class="rival-team ai-team">
+          <span class="team-kicker">AI · automatic dispatch</span>
+          <strong id="ai-rival-score">0.0</strong>
+          <small><b id="ai-rival-transported">0</b> delivered · <b id="ai-rival-wait">0.0</b> avg wait</small>
+        </article>
+        <div id="rival-result" class="rival-result" hidden></div>
+      </section>
 
       <section class="metric-strip" aria-label="Live performance metrics">
         <article><span>People moved</span><strong id="transported-metric">0</strong><small id="transported-goal">goal 0</small></article>
@@ -37,24 +53,35 @@
         <section class="map-panel">
           <div class="section-heading">
             <div><p class="eyebrow">The horizontal tower</p><h1>Port Moresby service map</h1></div>
-            <div class="legend"><span><i class="dot stop"></i>Stop / floor</span><span><i class="dot vehicle"></i>CityLift</span><span><i class="dot traffic"></i>Traffic</span></div>
+            <div class="legend"><span><i class="dot stop"></i>Stop / floor</span><span><i class="dot vehicle"></i>CityLift</span><span><i class="dot traffic"></i>Traffic</span><span><i class="dot signal"></i>Signal</span><span><i class="dot ambient"></i>Road cars</span></div>
           </div>
           <div class="map-frame">
-            <svg id="city-map" role="img" aria-label="Stylized Port Moresby transport map" viewBox="0 0 850 600"></svg>
+            <svg id="city-map" role="img" aria-label="Stylized Port Moresby transport map with Downtown fleet parking" viewBox="0 0 1000 760"></svg>
+            <div id="passenger-animation-layer" class="passenger-animation-layer" aria-hidden="true"></div>
           </div>
           <p id="accuracy-note" class="accuracy-note"></p>
         </section>
 
         <aside class="control-panel">
           <section>
-            <div class="section-heading compact"><div><p class="eyebrow">Elevator cars</p><h2>CityLift fleet</h2></div><span class="live-badge">● live</span></div>
+            <div class="section-heading compact"><div><p class="eyebrow">Rival operators</p><h2>Human and AI fleets</h2></div><span class="live-badge">● live</span></div>
             <div id="vehicle-list" class="vehicle-list"></div>
           </section>
 
-          <section class="floor-section">
-            <div class="section-heading compact"><div><p class="eyebrow">Floor-call panel</p><h2>Dispatch selected lift</h2></div></div>
-            <p class="hint">Choose a CityLift above, then send it to a named stop.</p>
-            <div id="stop-panel" class="stop-panel"></div>
+          <section class="algorithm-section">
+            <div class="section-heading compact"><div><p class="eyebrow">Human automation</p><h2>Your fleet algorithms</h2></div></div>
+            <p class="hint">Assign an automatic policy to each human CityLift. There is no manual floor panel.</p>
+            <div id="algorithm-controls" class="algorithm-controls"></div>
+          </section>
+
+          <section class="chat-section">
+            <div class="section-heading compact"><div><p class="eyebrow">Pi operations agent</p><h2>Fleet conversation</h2></div><span id="chat-status" class="chat-status">ready</span></div>
+            <div id="chat-log" class="chat-log" aria-live="polite"></div>
+            <form id="chat-form" class="chat-form">
+              <label class="sr-only" for="chat-input">Message the Pi fleet agent</label>
+              <input id="chat-input" maxlength="1200" autocomplete="off" placeholder="Ask Pi or say “Send H1 to Boroko”" />
+              <button id="chat-send" type="submit">Send</button>
+            </form>
           </section>
 
           <section>

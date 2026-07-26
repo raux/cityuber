@@ -6,8 +6,9 @@
 Browser UI
   ├── Port Moresby map
   ├── elevator-style fleet cards
-  ├── named stop / floor-call panel
-  └── metrics and event log
+  ├── per-vehicle human algorithm controls
+  ├── conversational Pi fleet-agent chat
+  └── rival metrics and event log
           │
           ▼
 Deterministic simulation (`src/engine.js`)
@@ -18,10 +19,11 @@ Deterministic simulation (`src/engine.js`)
   └── scoring
           │
           ├── road routing (`src/routing.js`)
-          └── bounded decisions (`src/strategy.js`)
+          ├── deterministic human algorithms (`src/engine.js`)
+          └── bounded rival decisions (`src/strategy.js`)
 ```
 
-The strategy returns only a map from vehicle IDs to stop IDs:
+The rival strategy returns only a map from vehicle IDs to stop IDs:
 
 ```json
 {
@@ -31,6 +33,21 @@ The strategy returns only a map from vehicle IDs to stop IDs:
 ```
 
 It cannot mutate the map, passenger state, metrics, or vehicle positions.
+
+## Pi fleet-agent boundary
+
+`server.js` embeds Pi through the SDK using an in-memory, tool-free session. Credentials are resolved only on the Node server and never sent to the browser. Every response is reduced to conversational text and an allowlisted action schema:
+
+```json
+{
+  "reply": "H1 is now prioritizing older calls.",
+  "actions": [
+    { "type": "set_algorithm", "vehicleId": "human-1", "algorithm": "oldest" }
+  ]
+}
+```
+
+The browser and engine validate vehicle IDs, stop IDs, operators, and algorithm names before applying an action. Pi cannot modify simulation state directly.
 
 ## Next phase: Pi strategy laboratory
 
