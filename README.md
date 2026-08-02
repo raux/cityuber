@@ -2,31 +2,31 @@
 
 CityUber is an elevator-inspired public-transport simulation on a stylized Port Moresby map. Named city stops act like floors, passenger requests act like floor calls, and buses or shuttles act like elevator cars moving through a horizontal road “shaft.”
 
-> Status: working deterministic MVP. The map is designed for simulation and is not geographically precise or suitable for navigation.
+> The map is designed for simulation and is not geographically precise or suitable for navigation.
 
-## MVP features
+## Play online
 
-- Eight named Port Moresby-inspired stops
-- Connected road network and traffic-aware shortest paths
-- Two human CityLifts controlled by selectable algorithms and a conversational Pi fleet agent
+Open [CityUber on GitHub Pages](https://raux.github.io/cityuber/).
+
+## Features
+
+- Eight Port Moresby-inspired stops on a connected road network
+- Two human CityLifts controlled only through manual destination dispatch
+- Adaptive rival AI that switches among energy-saving, balanced, traffic-aware, queue-surge, and catch-up behavior
 - Passenger calls, waiting, partial boarding, travel, and exiting
-- Animated human figures for new queues, boarding, and exiting
-- SVG car, shuttle, and minibus silhouettes with visible onboard passengers
-- Direction-aware vehicle motion with smooth horizontal/vertical turns
-- Collision-safe intersection reservations so vehicles yield instead of overlapping
-- Phase-based traffic lights that stop horizontal or vertical traffic on red
-- Deterministic dynamic traffic lights that are added and removed during a run
-- Ten seeded ambient cars that circulate continuously and create realistic congestion
-- Rival Operators scoring with separate delivery, waiting, accessibility, and energy results
-- Tool-free server-side Pi chat for conversation, dispatch instructions, and algorithm changes
-- Nearest-call, oldest-call, accessibility-priority, and energy-saving human fleet controls
-- Easy, Medium, and Hard deterministic rival AI strategy presets
-- Multiple onboard destinations
-- Automated elevator-style dispatch
-- Manual floor-call panel for sending a selected vehicle to a stop
-- Temporary traffic events
-- Live throughput, waiting, energy, accessibility, fairness, and score metrics
+- Traffic-aware routing, temporary congestion, traffic lights, and ambient cars
+- Collision-safe intersection reservations
+- Rival scoring for delivery, waiting, accessibility, and energy performance
+- SVG fleet and passenger animation
+- Responsive browser UI
 - Deterministic Node tests
+- Automated GitHub Pages deployment
+
+## Human versus AI
+
+The human player chooses every destination for H1 and H2 using the **Manual fleet dispatch** controls. Human vehicles never select stops automatically.
+
+The rival fleet is fully automated. Its deterministic adaptive strategy observes queue pressure, maximum waiting time, active traffic events, and the current competition score, then changes operating mode without using a remote model or service.
 
 ## Elevator metaphor
 
@@ -38,10 +38,10 @@ CityUber is an elevator-inspired public-transport simulation on a stylized Port 
 | Destination floor | Destination stop |
 | Shaft | Connected road network |
 | Doors opening | Boarding and exiting |
-| Controller | Dispatch strategy |
+| Controller | Human dispatch or adaptive rival strategy |
 | Shaft congestion | Road traffic |
 
-## Run
+## Run locally
 
 Node.js 22.19 or newer is recommended.
 
@@ -51,12 +51,6 @@ npm start
 
 Open <http://127.0.0.1:4190/>.
 
-The Pi fleet chat prefers the lightweight local LM Studio model `google/gemma-4-e2b` when available, then falls back to another configured Pi model. Override selection with a full provider/model key:
-
-```bash
-CITYUBER_PI_MODEL=lmstudio/google/gemma-4-e2b npm start
-```
-
 ## Test
 
 ```bash
@@ -65,15 +59,9 @@ npm test
 
 ## Architecture
 
-The deterministic simulation lives in `src/engine.js`. Routing is isolated in `src/routing.js`, and the bounded dispatcher lives in `src/strategy.js`. Scenario data remains declarative under `scenarios/`.
+The deterministic simulation lives in `src/engine.js`. Routing is isolated in `src/routing.js`, while bounded rival decisions and adaptive strategy selection live in `src/strategy.js`. Scenario data remains declarative under `scenarios/`.
 
-Human vehicles run selected deterministic algorithms, while the server-side Pi fleet agent can discuss the game and submit validated dispatch or algorithm-change actions. The engine retains control of road routing, traffic delays, boarding, capacity, and metrics.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the next Pi-assisted phase.
-
-## Privacy and AI boundary
-
-Pi credentials remain server-side and are never exposed to the browser. The embedded chat session has no shell, filesystem, or coding tools; its output is restricted to conversational text plus validated human-fleet dispatch and algorithm actions. Deterministic engine evaluation remains separate from model conversation.
+The static browser application has no chat backend, credentials, model dependency, or remote AI API. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for details.
 
 ## Attribution
 

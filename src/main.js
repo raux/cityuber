@@ -1,28 +1,19 @@
 import { CityUberSimulation, onboardCount } from './engine.js'
 import { roadKey } from './routing.js'
-import { createDifficultyStrategy } from './strategy.js'
+import { adaptiveStrategyProfile, createAdaptiveStrategy } from './strategy.js'
 
-const scenario = await fetch('/scenarios/morning-rush.json').then((response) => {
+const scenarioUrl = new URL('../scenarios/morning-rush.json', import.meta.url)
+const scenario = await fetch(scenarioUrl).then((response) => {
   if (!response.ok) throw new Error('Could not load the CityUber scenario.')
   return response.json()
 })
 
-const initialDifficulty = scenario.competition?.defaultDifficulty ?? 'medium'
-let game = new CityUberSimulation(scenario, createDifficultyStrategy(initialDifficulty))
+let game = new CityUberSimulation(scenario, createAdaptiveStrategy())
 let timer = null
 let eventHistory = []
 const animatedPassengerEvents = new Set()
 let vehiclePoses = new Map()
 let trafficCarPoses = new Map()
-const algorithmLabels = {
-  nearest: 'Nearest call',
-  oldest: 'Oldest call',
-  accessibility: 'Accessibility priority',
-  energy: 'Energy saver',
-}
-const chatSessionId = globalThis.crypto?.randomUUID?.() ?? `cityuber-${Date.now()}`
-let chatPending = false
-let chatHistory = [{ role: 'assistant', text: 'I am your Pi fleet agent. Ask about the game, change H1/H2 algorithms, or give a dispatch instruction.' }]
 
 const elements = {
   map: document.querySelector('#city-map'),
@@ -44,12 +35,8 @@ const elements = {
   rivalStatus: document.querySelector('#rival-status'),
   rivalResult: document.querySelector('#rival-result'),
   vehicleList: document.querySelector('#vehicle-list'),
-  algorithmControls: document.querySelector('#algorithm-controls'),
-  chatStatus: document.querySelector('#chat-status'),
-  chatLog: document.querySelector('#chat-log'),
-  chatForm: document.querySelector('#chat-form'),
-  chatInput: document.querySelector('#chat-input'),
-  chatSend: document.querySelector('#chat-send'),
+  manualControls: document.querySelector('#manual-controls'),
+  aiMode: document.querySelector('#ai-mode'),
   waitingList: document.querySelector('#waiting-list'),
   waitingCount: document.querySelector('#waiting-count'),
   eventLog: document.querySelector('#event-log'),
@@ -58,7 +45,6 @@ const elements = {
   pause: document.querySelector('#pause-button'),
   step: document.querySelector('#step-button'),
   reset: document.querySelector('#reset-button'),
-  difficulty: document.querySelector('#difficulty-select'),
   speed: document.querySelector('#speed-select'),
 }
 
@@ -105,8 +91,7 @@ function render() {
   renderCompetition(state)
   renderMap(state)
   renderVehicles(state)
-  renderHumanControls(state)
-  renderChat()
+  renderManualControls(state)
   renderWaiting(state)
   renderEvents()
   elements.time.textContent = state.time
@@ -128,6 +113,7 @@ function renderMetrics(state) {
 
 function renderCompetition(state) {
   if (!state.competition?.enabled) return
+  elements.aiMode.textContent = `AI adaptive · ${adaptiveStrategyProfile(state).label}`
   const humanMetrics = state.competition.metrics.human
   const aiMetrics = state.competition.metrics.ai
   const averageWait = (metrics) => metrics.boarded ? metrics.totalWait / metrics.boarded : 0
@@ -366,20 +352,38 @@ function renderVehicles(state) {
   }).join('')
 }
 
-function renderHumanControls(state) {
+function renderManualControls(state) {
   const humanVehicles = state.vehicles.filter((vehicle) => vehicle.operator === 'human')
-  elements.algorithmControls.innerHTML = humanVehicles.map((vehicle) => {
-    const options = Object.entries(algorithmLabels).map(([value, label]) => `<option value="${value}" ${vehicle.humanAlgorithm === value ? 'selected' : ''}>${label}</option>`).join('')
-    return `<label class="algorithm-control"><span><strong>${escapeHtml(vehicle.name)}</strong><small>${escapeHtml(vehicleTeamLabel(vehicle, state.vehicles.indexOf(vehicle)))}</small></span><select data-human-algorithm="${escapeHtml(vehicle.id)}">${options}</select></label>`
-  }).join('')
-  elements.algorithmControls.querySelectorAll('[data-human-algorithm]').forEach((select) => {
-    select.addEventListener('change', () => {
-      if (game.setHumanAlgorithm(select.dataset.humanAlgorithm, select.value)) {
-        const vehicle = state.vehicles.find((candidate) => candidate.id === select.dataset.humanAlgorithm)
-        appendChatMessage('system', `${vehicle.name} now uses ${algorithmLabels[select.value]}.`)
-      }
-      render()
+
+  if (!elements.manualControls.childElementCount) {
+    const stopOptions = state.scenario.stops
+      .map((stop) => `<option value="${escapeHtml(stop.id)}">${escapeHtml(stop.name)}</option>`)
+      .join('')
+    elements.manualControls.innerHTML = humanVehicles.map((vehicle) => `
+      <article class="manual-control" data-manual-vehicle="${escapeHtml(vehicle.id)}">
+        <span><strong>${escapeHtml(vehicle.name)}</strong><small data-manual-status>Awaiting dispatch</small></span>
+        <select data-dispatch-destination aria-label="Destination for ${escapeHtml(vehicle.name)}">${stopOptions}</select>
+        <button type="button" data-dispatch-button>Dispatch</button>
+      </article>
+    `).join('')
+
+    elements.manualControls.querySelectorAll('[data-dispatch-button]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const control = button.closest('[data-manual-vehicle]')
+        const vehicleId = control.dataset.manualVehicle
+        const destination = control.querySelector('[data-dispatch-destination]').value
+        if (game.dispatch(vehicleId, destination, 'human')) render()
+      })
     })
+  }
+
+  elements.manualControls.querySelectorAll('[data-manual-vehicle]').forEach((control) => {
+    const vehicle = state.vehicles.find((candidate) => candidate.id === control.dataset.manualVehicle)
+    const target = state.scenario.stops.find((stop) => stop.id === vehicle?.targetStopId)
+    const current = state.scenario.stops.find((stop) => stop.id === vehicle?.currentStopId)
+    const status = target ? `Travelling to ${target.name}` : current ? `Waiting at ${current.name}` : 'In transit'
+    control.querySelector('[data-manual-status]').textContent = status
+    control.querySelector('[data-dispatch-button]').disabled = !vehicle || vehicle.outOfService
   })
 }
 
@@ -397,87 +401,6 @@ function renderWaiting(state) {
       const to = state.scenario.stops.find((stop) => stop.id === request.to)?.name
       return `<article class="waiting-item"><span class="waiting-people">${request.remaining}</span><span><strong>${escapeHtml(from)} → ${escapeHtml(to)}</strong><small>${escapeHtml(request.type)}${request.requiresAccessible ? ' · accessible' : ''}</small></span><span class="wait-time">${request.waited}t</span></article>`
     }).join('')
-}
-
-function appendChatMessage(role, text) {
-  chatHistory.push({ role, text: String(text) })
-  chatHistory = chatHistory.slice(-40)
-}
-
-function renderChat() {
-  elements.chatLog.innerHTML = chatHistory.map((message) => `<div class="chat-message ${escapeHtml(message.role)}"><span>${escapeHtml(message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : 'System')}</span><p>${escapeHtml(message.text)}</p></div>`).join('')
-  elements.chatStatus.textContent = chatPending ? 'thinking…' : 'ready'
-  elements.chatStatus.classList.toggle('thinking', chatPending)
-  elements.chatInput.disabled = chatPending
-  elements.chatSend.disabled = chatPending
-  elements.chatLog.scrollTop = elements.chatLog.scrollHeight
-}
-
-function chatGameState() {
-  const state = game.snapshot()
-  return {
-    time: state.time,
-    duration: state.scenario.duration,
-    finished: state.finished,
-    difficulty: elements.difficulty.value,
-    scores: state.competition?.scores,
-    humanVehicles: state.vehicles.filter((vehicle) => vehicle.operator === 'human').map((vehicle, index) => ({
-      id: vehicle.id,
-      label: vehicleTeamLabel(vehicle, state.vehicles.indexOf(vehicle)),
-      name: vehicle.name,
-      algorithm: vehicle.humanAlgorithm,
-      currentStopId: vehicle.currentStopId,
-      targetStopId: vehicle.targetStopId,
-      onboard: onboardCount(vehicle),
-      destinations: [...new Set(vehicle.passengers.map((group) => group.to))],
-    })),
-    stops: state.scenario.stops.map((stop) => ({ id: stop.id, name: stop.name })),
-    waiting: state.waiting.slice(0, 12).map((request) => ({
-      from: request.from,
-      to: request.to,
-      remaining: request.remaining,
-      waited: request.waited,
-      priority: request.priority === true,
-      requiresAccessible: request.requiresAccessible === true,
-    })),
-  }
-}
-
-function applyChatActions(actions = []) {
-  const state = game.snapshot()
-  for (const action of actions) {
-    const vehicle = state.vehicles.find((candidate) => candidate.id === action.vehicleId && candidate.operator === 'human')
-    if (!vehicle) continue
-    if (action.type === 'set_algorithm' && game.setHumanAlgorithm(vehicle.id, action.algorithm)) {
-      appendChatMessage('system', `${vehicle.name} switched to ${algorithmLabels[action.algorithm]}.`)
-    }
-    if (action.type === 'dispatch') {
-      const stop = state.scenario.stops.find((candidate) => candidate.id === action.stopId)
-      if (stop && game.dispatch(vehicle.id, stop.id, 'human')) appendChatMessage('system', `${vehicle.name} dispatched to ${stop.name} by Pi.`)
-    }
-  }
-}
-
-async function sendChatMessage(message) {
-  appendChatMessage('user', message)
-  chatPending = true
-  renderChat()
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: chatSessionId, message, state: chatGameState() }),
-    })
-    const payload = await response.json()
-    if (!response.ok) throw new Error(payload.error || 'Pi chat is unavailable.')
-    appendChatMessage('assistant', payload.reply || 'I understood, but I have no additional response.')
-    applyChatActions(payload.actions)
-  } catch (error) {
-    appendChatMessage('system', `Chat error: ${error.message}`)
-  } finally {
-    chatPending = false
-    render()
-  }
 }
 
 function animatePassengerEvents(state) {
@@ -618,17 +541,6 @@ elements.start.addEventListener('click', run)
 elements.pause.addEventListener('click', pause)
 elements.step.addEventListener('click', () => { if (!timer) tick() })
 elements.reset.addEventListener('click', reset)
-elements.chatForm.addEventListener('submit', (event) => {
-  event.preventDefault()
-  const message = elements.chatInput.value.trim()
-  if (!message || chatPending) return
-  elements.chatInput.value = ''
-  sendChatMessage(message)
-})
-elements.difficulty.addEventListener('change', () => {
-  game.setStrategy(createDifficultyStrategy(elements.difficulty.value))
-  reset()
-})
 elements.speed.addEventListener('change', () => { if (timer) { pause(); run() } })
 
 render()

@@ -41,7 +41,6 @@ export class CityUberSimulation {
       return {
         ...structuredClone(vehicle),
         operator: vehicle.operator ?? (this.competitionEnabled ? 'human' : 'system'),
-        humanAlgorithm: vehicle.humanAlgorithm ?? 'nearest',
         position: [...start.position],
         currentStopId: start.id,
         targetStopId: null,
@@ -69,14 +68,6 @@ export class CityUberSimulation {
 
   setStrategy(strategy) {
     this.strategy = strategy
-  }
-
-  setHumanAlgorithm(vehicleId, algorithm) {
-    const allowed = new Set(['nearest', 'oldest', 'accessibility', 'energy'])
-    const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
-    if (!vehicle || vehicle.operator !== 'human' || !allowed.has(algorithm)) return false
-    vehicle.humanAlgorithm = algorithm
-    return true
   }
 
   dispatch(vehicleId, stopId, source = 'human') {
@@ -109,11 +100,6 @@ export class CityUberSimulation {
     this.#startTrafficEvents()
 
     for (const vehicle of this.vehicles) this.#serviceCurrentStop(vehicle)
-
-    if (this.competitionEnabled) {
-      const humanDecisions = this.#decideHumanDispatches()
-      for (const [vehicleId, stopId] of Object.entries(humanDecisions)) this.dispatch(vehicleId, stopId, 'human')
-    }
 
     const decisionState = this.snapshot()
     if (this.competitionEnabled) decisionState.vehicles = decisionState.vehicles.filter((vehicle) => vehicle.operator === 'ai')
@@ -287,48 +273,6 @@ export class CityUberSimulation {
       this.events.push({ type: 'board', vehicleId: vehicle.id, operator: vehicle.operator, stopId, requestId: request.id, count })
     }
     this.waiting = this.waiting.filter((request) => request.remaining > 0)
-  }
-
-  #decideHumanDispatches() {
-    const decisions = {}
-    for (const vehicle of this.vehicles.filter((candidate) => candidate.operator === 'human')) {
-      if (vehicle.outOfService || vehicle.route.length || vehicle.targetStopId) continue
-      const algorithm = vehicle.humanAlgorithm
-      if (vehicle.passengers.length) {
-        let groups = [...vehicle.passengers]
-        if (algorithm === 'oldest') groups.sort((left, right) => left.boardedAt - right.boardedAt)
-        else if (algorithm === 'accessibility') groups.sort((left, right) => Number(right.requiresAccessible) - Number(left.requiresAccessible) || left.boardedAt - right.boardedAt)
-        else groups.sort((left, right) => this.#distanceToStop(vehicle, left.to) - this.#distanceToStop(vehicle, right.to))
-        decisions[vehicle.id] = groups[0].to
-        continue
-      }
-
-      let requests = this.waiting.filter((request) => !request.requiresAccessible || vehicle.accessible)
-      if (!requests.length) continue
-      if (algorithm === 'oldest') {
-        requests = requests.sort((left, right) => left.at - right.at || this.#distanceToStop(vehicle, left.from) - this.#distanceToStop(vehicle, right.from))
-      } else if (algorithm === 'accessibility') {
-        requests = requests.sort((left, right) => Number(right.requiresAccessible) - Number(left.requiresAccessible) || Number(right.priority) - Number(left.priority) || left.at - right.at)
-      } else if (algorithm === 'energy') {
-        requests = requests.sort((left, right) => {
-          const leftLoad = Math.max(1, Math.min(vehicle.capacity, left.remaining))
-          const rightLoad = Math.max(1, Math.min(vehicle.capacity, right.remaining))
-          return this.#distanceToStop(vehicle, left.from) / leftLoad - this.#distanceToStop(vehicle, right.from) / rightLoad
-        })
-      } else {
-        requests = requests.sort((left, right) => this.#distanceToStop(vehicle, left.from) - this.#distanceToStop(vehicle, right.from) || left.at - right.at)
-      }
-      decisions[vehicle.id] = requests[0].from
-    }
-    return decisions
-  }
-
-  #distanceToStop(vehicle, stopId) {
-    const stop = this.stopById.get(stopId)
-    if (!stop) return Number.POSITIVE_INFINITY
-    if (samePosition(vehicle.position, stop.position)) return 0
-    const route = findRoute(vehicle.position, stop.position, this.scenario.roads, this.traffic, true)
-    return route.length || Number.POSITIVE_INFINITY
   }
 
   #createTrafficCars() {

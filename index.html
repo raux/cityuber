@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#102b27" />
     <meta name="description" content="CityUber turns Port Moresby transport stops into the floors of a city-scale elevator simulation." />
-    <link rel="icon" href="/public/favicon.svg" />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="icon" href="./public/favicon.svg" />
+    <link rel="stylesheet" href="./src/styles.css" />
     <title>CityUber — Port Moresby in motion</title>
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="CityUber home">
+        <a class="brand" href="./" aria-label="CityUber home">
           <span class="brand-icon">↟</span>
           <span><strong>CityUber</strong><small>Port Moresby city lift</small></span>
         </a>
@@ -22,7 +22,7 @@
           <button id="pause-button" class="button">Pause</button>
           <button id="step-button" class="button">Step</button>
           <button id="reset-button" class="button icon" title="Reset">↺</button>
-          <label class="difficulty-control">AI <select id="difficulty-select"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></label>
+          <span id="ai-mode" class="ai-mode">AI adaptive · Energy saver</span>
           <label class="speed-control">Speed <select id="speed-select"><option value="850">Calm</option><option value="450" selected>Normal</option><option value="180">Fast</option></select></label>
         </div>
       </header>
@@ -68,20 +68,10 @@
             <div id="vehicle-list" class="vehicle-list"></div>
           </section>
 
-          <section class="algorithm-section">
-            <div class="section-heading compact"><div><p class="eyebrow">Human automation</p><h2>Your fleet algorithms</h2></div></div>
-            <p class="hint">Assign an automatic policy to each human CityLift. There is no manual floor panel.</p>
-            <div id="algorithm-controls" class="algorithm-controls"></div>
-          </section>
-
-          <section class="chat-section">
-            <div class="section-heading compact"><div><p class="eyebrow">Pi operations agent</p><h2>Fleet conversation</h2></div><span id="chat-status" class="chat-status">ready</span></div>
-            <div id="chat-log" class="chat-log" aria-live="polite"></div>
-            <form id="chat-form" class="chat-form">
-              <label class="sr-only" for="chat-input">Message the Pi fleet agent</label>
-              <input id="chat-input" maxlength="1200" autocomplete="off" placeholder="Ask Pi or say “Send H1 to Boroko”" />
-              <button id="chat-send" type="submit">Send</button>
-            </form>
+          <section class="manual-section">
+            <div class="section-heading compact"><div><p class="eyebrow">Human control</p><h2>Manual fleet dispatch</h2></div></div>
+            <p class="hint">Choose every destination yourself. Human vehicles never dispatch automatically.</p>
+            <div id="manual-controls" class="manual-controls"></div>
           </section>
 
           <section>
@@ -96,6 +86,6 @@
         <div id="event-log" class="event-log" aria-live="polite"></div>
       </section>
     </div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>

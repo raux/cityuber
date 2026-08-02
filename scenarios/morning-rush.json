@@ -16,7 +16,7 @@
   },
   "fleetParking": { "stopId": "downtown", "capacity": 4 },
   "ambientTraffic": { "count": 10 },
-  "competition": { "enabled": true, "humanOperator": "human", "aiOperator": "ai", "defaultDifficulty": "medium" },
+  "competition": { "enabled": true, "humanOperator": "human", "aiOperator": "ai" },
   "stops": [
     { "id": "downtown", "name": "Downtown", "position": [0, 6], "accessible": true },
     { "id": "koki", "name": "Koki", "position": [1, 5], "accessible": true },
@@ -28,8 +28,8 @@
     { "id": "jacksons", "name": "Jacksons Airport", "position": [8, 0], "accessible": true }
   ],
   "vehicles": [
-    { "id": "human-1", "name": "CityLift H1", "operator": "human", "humanAlgorithm": "nearest", "type": "shuttle", "capacity": 6, "accessible": true, "energyPerStep": 1.3, "startStop": "downtown" },
-    { "id": "human-2", "name": "CityLift H2", "operator": "human", "humanAlgorithm": "accessibility", "type": "minibus", "capacity": 10, "accessible": true, "energyPerStep": 1.8, "startStop": "gerehu" },
+    { "id": "human-1", "name": "CityLift H1", "operator": "human", "type": "shuttle", "capacity": 6, "accessible": true, "energyPerStep": 1.3, "startStop": "downtown" },
+    { "id": "human-2", "name": "CityLift H2", "operator": "human", "type": "minibus", "capacity": 10, "accessible": true, "energyPerStep": 1.8, "startStop": "gerehu" },
     { "id": "ai-1", "name": "Rival AI 1", "operator": "ai", "type": "shuttle", "capacity": 6, "accessible": true, "energyPerStep": 1.3, "startStop": "jacksons" },
     { "id": "ai-2", "name": "Rival AI 2", "operator": "ai", "type": "minibus", "capacity": 10, "accessible": true, "energyPerStep": 1.8, "startStop": "boroko" }
   ],

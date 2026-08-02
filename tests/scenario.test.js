@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import { CityUberSimulation } from '../src/engine.js'
 import { roadKey } from '../src/routing.js'
-import { createDifficultyStrategy, createStrategy } from '../src/strategy.js'
+import { createAdaptiveStrategy, createStrategy } from '../src/strategy.js'
 
 const scenario = JSON.parse(await readFile(new URL('../scenarios/morning-rush.json', import.meta.url), 'utf8'))
 
@@ -33,9 +33,9 @@ test('passenger requests use known, distinct stops', () => {
   }
 })
 
-test('the competitive morning scenario produces deterministic algorithmic fleets', () => {
+test('the competitive morning scenario produces deterministic adaptive AI', () => {
   const run = () => {
-    const game = new CityUberSimulation(scenario, createDifficultyStrategy('medium'))
+    const game = new CityUberSimulation(scenario, createAdaptiveStrategy())
     while (!game.isFinished()) game.step()
     const state = game.snapshot()
     return { score: state.score, competition: state.competition }
@@ -44,6 +44,6 @@ test('the competitive morning scenario produces deterministic algorithmic fleets
   const second = run()
   assert.deepEqual(first, second)
   assert.ok(first.competition.metrics.ai.transported > 0)
-  assert.ok(first.competition.metrics.human.transported > 0)
+  assert.equal(first.competition.metrics.human.transported, 0)
   assert.ok(['human', 'ai', 'tie'].includes(first.competition.winner))
 })

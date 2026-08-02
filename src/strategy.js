@@ -40,6 +40,79 @@ export const aiDifficultyConfigs = Object.freeze({
   }),
 })
 
+export function adaptiveStrategyProfile(state = {}) {
+  const waiting = state.waiting ?? []
+  const waitingPassengers = waiting.reduce((total, request) => total + (request.remaining ?? 0), 0)
+  const maximumWait = waiting.reduce((maximum, request) => Math.max(maximum, request.waited ?? 0), 0)
+  const trafficEvents = Object.keys(state.traffic ?? {}).length
+  const humanScore = state.competition?.scores?.human ?? 0
+  const aiScore = state.competition?.scores?.ai ?? 0
+
+  if (humanScore > aiScore + 5) {
+    return {
+      key: 'catch-up',
+      label: 'Catch-up',
+      config: {
+        ...aiDifficultyConfigs.hard,
+        priorityWeight: 24,
+        queueAgeWeight: 5,
+        maxActiveVehicles: 12,
+      },
+    }
+  }
+
+  if (maximumWait >= 10 || waitingPassengers >= 18) {
+    return {
+      key: 'queue-surge',
+      label: 'Queue surge',
+      config: {
+        ...aiDifficultyConfigs.hard,
+        queueAgeWeight: 5,
+        maxActiveVehicles: 12,
+      },
+    }
+  }
+
+  if (trafficEvents >= 2) {
+    return {
+      key: 'traffic-aware',
+      label: 'Traffic-aware',
+      config: {
+        ...aiDifficultyConfigs.medium,
+        distanceWeight: 4.5,
+        avoidTraffic: true,
+      },
+    }
+  }
+
+  if (waitingPassengers === 0) {
+    return {
+      key: 'energy-saver',
+      label: 'Energy saver',
+      config: {
+        ...aiDifficultyConfigs.medium,
+        energySaving: true,
+        maxActiveVehicles: 1,
+      },
+    }
+  }
+
+  return {
+    key: 'balanced',
+    label: 'Balanced',
+    config: aiDifficultyConfigs.medium,
+  }
+}
+
+export function createAdaptiveStrategy() {
+  return {
+    name: 'Adaptive rival dispatcher',
+    decide(state) {
+      return createStrategy(adaptiveStrategyProfile(state).config).decide(state)
+    },
+  }
+}
+
 export function createDifficultyStrategy(level = 'medium') {
   return createStrategy(aiDifficultyConfigs[level] ?? aiDifficultyConfigs.medium)
 }

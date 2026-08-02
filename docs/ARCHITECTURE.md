@@ -3,11 +3,11 @@
 ## Stable boundaries
 
 ```text
-Browser UI
+Static browser UI
   ├── Port Moresby map
   ├── elevator-style fleet cards
-  ├── per-vehicle human algorithm controls
-  ├── conversational Pi fleet-agent chat
+  ├── manual human destination controls
+  ├── adaptive rival status
   └── rival metrics and event log
           │
           ▼
@@ -19,67 +19,49 @@ Deterministic simulation (`src/engine.js`)
   └── scoring
           │
           ├── road routing (`src/routing.js`)
-          ├── deterministic human algorithms (`src/engine.js`)
-          └── bounded rival decisions (`src/strategy.js`)
+          └── bounded adaptive rival decisions (`src/strategy.js`)
 ```
 
-The rival strategy returns only a map from vehicle IDs to stop IDs:
+The browser loads only static HTML, CSS, JavaScript, SVG, and scenario JSON. It does not require a chat backend, model provider, credentials, or a server-side runtime after deployment.
+
+## Human control boundary
+
+Human vehicles never receive automatic decisions from the simulation engine. The player selects a stop for each human vehicle and calls:
+
+```js
+game.dispatch(vehicleId, stopId, 'human')
+```
+
+The engine verifies that the selected vehicle belongs to the human operator, that the stop exists, and that a valid route can be found. Human dispatch may safely replace a vehicle's current route.
+
+## Adaptive rival AI
+
+The rival strategy returns only a map from AI vehicle IDs to stop IDs:
 
 ```json
 {
-  "lift-a": "waigani",
-  "lift-b": "downtown"
+  "ai-1": "waigani",
+  "ai-2": "downtown"
 }
 ```
 
-It cannot mutate the map, passenger state, metrics, or vehicle positions.
+`adaptiveStrategyProfile` selects one deterministic mode from current game state:
 
-## Pi fleet-agent boundary
+- **Energy saver** when no passenger queue exists
+- **Balanced** during normal demand
+- **Traffic-aware** when multiple road incidents are active
+- **Queue surge** when passenger volume or waiting time is high
+- **Catch-up** when the AI trails the human score
 
-`server.js` embeds Pi through the SDK using an in-memory, tool-free session. Credentials are resolved only on the Node server and never sent to the browser. Every response is reduced to conversational text and an allowlisted action schema:
+The selected bounded configuration is passed to the dispatcher. The AI cannot mutate the map, passengers, metrics, human vehicles, or vehicle positions directly.
 
-```json
-{
-  "reply": "H1 is now prioritizing older calls.",
-  "actions": [
-    { "type": "set_algorithm", "vehicleId": "human-1", "algorithm": "oldest" }
-  ]
-}
-```
+## Determinism and testing
 
-The browser and engine validate vehicle IDs, stop IDs, operators, and algorithm names before applying an action. Pi cannot modify simulation state directly.
+`src/engine.js`, `src/routing.js`, and `src/strategy.js` remain independent from the DOM and remote services. Tests cover manual operator isolation, routing, traffic, simulation outcomes, and adaptive mode selection.
 
-## Next phase: Pi strategy laboratory
+## Static deployment
 
-Adapt the candidate lifecycle from `tower-agents`:
-
-1. User asks to improve service, waiting, energy, accessibility, or fairness.
-2. A tool-free Pi session proposes bounded strategy configuration.
-3. Server normalization rejects unknown keys and clamps values.
-4. Baseline and candidate run against deterministic scenarios.
-5. UI shows a configuration diff and metric trade-offs.
-6. Human approves or rejects the candidate.
-7. Approved revisions can be rolled back.
-
-Initial allowlisted configuration:
-
-```json
-{
-  "strategyMode": "optimized",
-  "priorityWeight": 12,
-  "queueAgeWeight": 2.5,
-  "distanceWeight": 3,
-  "occupancyWeight": 2,
-  "accessibilityWeight": 14,
-  "avoidTraffic": true,
-  "pooling": true,
-  "maxActiveVehicles": 3,
-  "homeStop": "downtown",
-  "energySaving": false
-}
-```
-
-AI must never generate or execute simulation code in the MVP workflow.
+The GitHub Pages workflow runs the deterministic tests, copies only browser assets into a deployment artifact, and publishes the artifact. `server.js` is a small optional static server for local development.
 
 ## Planned scenarios
 

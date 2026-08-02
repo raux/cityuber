@@ -54,9 +54,12 @@ test('competitive mode isolates human and AI dispatch control', () => {
   }
   const game = new CityUberSimulation(competitiveScenario, null)
   assert.equal(game.dispatch('ai', 'a'), false)
-  assert.equal(game.setHumanAlgorithm('human', 'oldest'), true)
-  assert.equal(game.setHumanAlgorithm('human', 'manual'), false)
 
+  const waitingForHuman = game.step()
+  assert.deepEqual(waitingForHuman.vehicles.find((vehicle) => vehicle.id === 'human').position, [0,0])
+  assert.equal(waitingForHuman.vehicles.find((vehicle) => vehicle.id === 'human').targetStopId, null)
+
+  assert.equal(game.dispatch('human', 'b'), true)
   const moving = game.step()
   assert.deepEqual(moving.vehicles.find((vehicle) => vehicle.id === 'human').position, [1,0])
   const final = game.step()

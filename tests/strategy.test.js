@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createStrategy } from '../src/strategy.js'
+import { adaptiveStrategyProfile, createAdaptiveStrategy, createStrategy } from '../src/strategy.js'
 
 const scenario = {
   roads: [[0,0],[1,0],[2,0]],
@@ -36,4 +36,20 @@ test('onboard passenger destination takes precedence', () => {
     passengers: [{ requestId: 'r1', to: 'b', count: 1 }],
   }]
   assert.deepEqual(createStrategy().decide(state({ vehicles })), { 'lift-a': 'b' })
+})
+
+test('adaptive rival conserves energy when no passengers are waiting', () => {
+  assert.equal(adaptiveStrategyProfile(state()).key, 'energy-saver')
+})
+
+test('adaptive rival responds to queue pressure', () => {
+  const waiting = [{ id: 'surge', at: 0, from: 'b', to: 'a', remaining: 20, waited: 12 }]
+  const pressured = state({ waiting })
+  assert.equal(adaptiveStrategyProfile(pressured).key, 'queue-surge')
+  assert.deepEqual(createAdaptiveStrategy().decide(pressured), { 'lift-a': 'b' })
+})
+
+test('adaptive rival switches to catch-up mode when behind', () => {
+  const competition = { scores: { human: 20, ai: 5 } }
+  assert.equal(adaptiveStrategyProfile(state({ competition })).key, 'catch-up')
 })
