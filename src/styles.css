@@ -180,14 +180,35 @@ h2 { font-size: 19px; }
 .capacity small { text-transform: uppercase; }
 .hint { margin: -2px 0 10px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .manual-controls { display: grid; gap: 7px; }
-.manual-control { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(90px, 1fr) auto; align-items: center; gap: 7px; padding: 9px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 8px; background: #fffdf7; }
+.manual-control { display: grid; grid-template-columns: minmax(60px, 1fr) minmax(80px, 1fr) minmax(82px, auto); align-items: center; gap: 7px; padding: 9px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 8px; background: #fffdf7; }
 .manual-control strong, .manual-control small { display: block; }
 .manual-control strong { font-size: 10px; }
 .manual-control small { margin-top: 2px; color: #9a681c; font-size: 7px; font-weight: 700; }
 .manual-control select { min-width: 0; min-height: 34px; padding: 0 7px; border: 1px solid #cbd4cc; border-radius: 6px; color: var(--ink); background: white; font-size: 9px; }
-.manual-control button { min-height: 34px; padding: 0 9px; border: 0; border-radius: 6px; color: white; background: var(--forest-2); cursor: pointer; font-size: 8px; font-weight: 700; }
+.manual-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.manual-control button { min-height: 34px; padding: 0 6px; border: 0; border-radius: 6px; color: white; background: var(--forest-2); cursor: pointer; font-size: 8px; font-weight: 700; }
+.manual-control button.queue-button { color: #6f4b17; background: #f6d69f; }
 .manual-control button:hover { background: var(--forest); }
+.manual-control button.queue-button:hover { background: #edc47d; }
 .manual-control button:disabled { cursor: not-allowed; opacity: .55; }
+.dispatch-queues { display: grid; gap: 8px; }
+.dispatch-queue-card { overflow: hidden; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 8px; background: #fffdf7; }
+.dispatch-queue-card:nth-child(2) { border-left-color: #76b4a3; }
+.dispatch-queue-card > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px; background: #f5f2e8; }
+.dispatch-queue-card > header strong, .dispatch-queue-card > header small { display: block; }
+.dispatch-queue-card > header strong { font-size: 10px; }
+.dispatch-queue-card > header small { margin-top: 2px; color: var(--muted); font-size: 7px; }
+.dispatch-queue-card > header button { padding: 4px 7px; border: 1px solid #d8d4c7; border-radius: 5px; color: #6c5a39; background: white; cursor: pointer; font-size: 7px; font-weight: 700; }
+.dispatch-queue-card > header button:disabled { cursor: not-allowed; opacity: .45; }
+.dispatch-queue-card ol { display: grid; gap: 1px; max-height: 175px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.dispatch-queue-item { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; padding: 6px 8px; border-top: 1px solid #ece9df; }
+.queue-order { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: #6f4b17; background: #f8dfb5; font-size: 8px; font-weight: 800; }
+.dispatch-queue-item strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.queue-edit-buttons { display: flex; gap: 3px; }
+.queue-edit-buttons button { width: 23px; height: 23px; padding: 0; border: 1px solid #d6d9d2; border-radius: 5px; color: var(--forest-2); background: white; cursor: pointer; font-size: 11px; }
+.queue-edit-buttons button:last-child { color: #a95343; }
+.queue-edit-buttons button:disabled { cursor: not-allowed; opacity: .35; }
+.queue-empty { margin: 0; padding: 13px 9px; color: var(--muted); font-size: 8px; }
 .count-pill { min-width: 23px; padding: 4px 7px; border-radius: 12px; text-align: center; color: white; background: var(--coral); font-size: 9px; }
 .waiting-list { max-height: 185px; overflow-y: auto; }
 .waiting-item { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 8px 2px; border-top: 1px solid #e8ebe5; }

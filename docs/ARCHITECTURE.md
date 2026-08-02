@@ -6,7 +6,8 @@
 Static browser UI
   ├── Port Moresby map
   ├── elevator-style fleet cards
-  ├── manual human destination controls
+  ├── manual human destination and queue controls
+  ├── editable per-vehicle queue cards
   ├── adaptive rival status
   └── rival metrics and event log
           │
@@ -26,13 +27,22 @@ The browser loads only static HTML, CSS, JavaScript, SVG, and scenario JSON. It 
 
 ## Human control boundary
 
-Human vehicles never receive automatic decisions from the simulation engine. The player selects a stop for each human vehicle and calls:
+Human vehicles never receive automatic destination decisions from the simulation engine. Immediate commands call:
 
 ```js
 game.dispatch(vehicleId, stopId, 'human')
 ```
 
-The engine verifies that the selected vehicle belongs to the human operator, that the stop exists, and that a valid route can be found. Human dispatch may safely replace a vehicle's current route.
+Future stops use the bounded queue API:
+
+```js
+game.queueDispatch(vehicleId, stopId)
+game.moveQueuedDispatch(vehicleId, index, direction)
+game.removeQueuedDispatch(vehicleId, index)
+game.clearDispatchQueue(vehicleId)
+```
+
+The engine verifies human ownership and known stops, caps each queue at eight destinations, and starts the next queued destination only when the current trip is complete. Queue order is deterministic and included in simulation snapshots. Human dispatch may safely replace a vehicle's current route.
 
 ## Adaptive rival AI
 

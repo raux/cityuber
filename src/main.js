@@ -1,4 +1,4 @@
-import { CityUberSimulation, onboardCount } from './engine.js'
+import { CityUberSimulation, MAX_DISPATCH_QUEUE, onboardCount } from './engine.js'
 import { roadKey } from './routing.js'
 import { adaptiveStrategyProfile, createAdaptiveStrategy } from './strategy.js'
 
@@ -36,6 +36,8 @@ const elements = {
   rivalResult: document.querySelector('#rival-result'),
   vehicleList: document.querySelector('#vehicle-list'),
   manualControls: document.querySelector('#manual-controls'),
+  dispatchQueues: document.querySelector('#dispatch-queues'),
+  dispatchQueueCount: document.querySelector('#dispatch-queue-count'),
   aiMode: document.querySelector('#ai-mode'),
   waitingList: document.querySelector('#waiting-list'),
   waitingCount: document.querySelector('#waiting-count'),
@@ -92,6 +94,7 @@ function render() {
   renderMap(state)
   renderVehicles(state)
   renderManualControls(state)
+  renderDispatchQueues(state)
   renderWaiting(state)
   renderEvents()
   elements.time.textContent = state.time
@@ -363,7 +366,10 @@ function renderManualControls(state) {
       <article class="manual-control" data-manual-vehicle="${escapeHtml(vehicle.id)}">
         <span><strong>${escapeHtml(vehicle.name)}</strong><small data-manual-status>Awaiting dispatch</small></span>
         <select data-dispatch-destination aria-label="Destination for ${escapeHtml(vehicle.name)}">${stopOptions}</select>
-        <button type="button" data-dispatch-button>Dispatch</button>
+        <span class="manual-actions">
+          <button type="button" data-dispatch-button>Now</button>
+          <button type="button" class="queue-button" data-queue-button>Queue</button>
+        </span>
       </article>
     `).join('')
 
@@ -375,6 +381,15 @@ function renderManualControls(state) {
         if (game.dispatch(vehicleId, destination, 'human')) render()
       })
     })
+
+    elements.manualControls.querySelectorAll('[data-queue-button]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const control = button.closest('[data-manual-vehicle]')
+        const vehicleId = control.dataset.manualVehicle
+        const destination = control.querySelector('[data-dispatch-destination]').value
+        if (game.queueDispatch(vehicleId, destination)) render()
+      })
+    })
   }
 
   elements.manualControls.querySelectorAll('[data-manual-vehicle]').forEach((control) => {
@@ -383,7 +398,53 @@ function renderManualControls(state) {
     const current = state.scenario.stops.find((stop) => stop.id === vehicle?.currentStopId)
     const status = target ? `Travelling to ${target.name}` : current ? `Waiting at ${current.name}` : 'In transit'
     control.querySelector('[data-manual-status]').textContent = status
-    control.querySelector('[data-dispatch-button]').disabled = !vehicle || vehicle.outOfService
+    control.querySelector('[data-dispatch-button]').disabled =
+      state.finished || !vehicle || vehicle.outOfService
+    control.querySelector('[data-queue-button]').disabled =
+      state.finished || !vehicle || vehicle.outOfService || vehicle.dispatchQueue.length >= MAX_DISPATCH_QUEUE
+  })
+}
+
+function renderDispatchQueues(state) {
+  const humanVehicles = state.vehicles.filter((vehicle) => vehicle.operator === 'human')
+  const totalQueued = humanVehicles.reduce((total, vehicle) => total + vehicle.dispatchQueue.length, 0)
+  elements.dispatchQueueCount.textContent = totalQueued
+  elements.dispatchQueues.innerHTML = humanVehicles.map((vehicle, vehicleIndex) => {
+    const label = vehicleTeamLabel(vehicle, state.vehicles.indexOf(vehicle))
+    const queueItems = vehicle.dispatchQueue.map((stopId, index) => {
+      const stop = state.scenario.stops.find((candidate) => candidate.id === stopId)
+      const stopName = stop?.name ?? stopId
+      return `
+        <li class="dispatch-queue-item">
+          <span class="queue-order">${index + 1}</span>
+          <strong>${escapeHtml(stopName)}</strong>
+          <span class="queue-edit-buttons">
+            <button type="button" data-queue-action="up" data-vehicle-id="${escapeHtml(vehicle.id)}" data-queue-index="${index}" aria-label="Move ${escapeHtml(stopName)} up" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" data-queue-action="down" data-vehicle-id="${escapeHtml(vehicle.id)}" data-queue-index="${index}" aria-label="Move ${escapeHtml(stopName)} down" ${index === vehicle.dispatchQueue.length - 1 ? 'disabled' : ''}>↓</button>
+            <button type="button" data-queue-action="remove" data-vehicle-id="${escapeHtml(vehicle.id)}" data-queue-index="${index}" aria-label="Remove ${escapeHtml(stopName)}">×</button>
+          </span>
+        </li>
+      `
+    }).join('')
+
+    return `
+      <article class="dispatch-queue-card operator-human-${vehicleIndex}">
+        <header><span><strong>${escapeHtml(label)}</strong><small>${vehicle.dispatchQueue.length}/${MAX_DISPATCH_QUEUE} stops</small></span><button type="button" data-queue-action="clear" data-vehicle-id="${escapeHtml(vehicle.id)}" ${vehicle.dispatchQueue.length ? '' : 'disabled'}>Clear</button></header>
+        ${queueItems ? `<ol>${queueItems}</ol>` : '<p class="queue-empty">No future stops queued.</p>'}
+      </article>
+    `
+  }).join('')
+
+  elements.dispatchQueues.querySelectorAll('[data-queue-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const { queueAction, vehicleId } = button.dataset
+      const index = Number(button.dataset.queueIndex)
+      if (queueAction === 'up') game.moveQueuedDispatch(vehicleId, index, -1)
+      if (queueAction === 'down') game.moveQueuedDispatch(vehicleId, index, 1)
+      if (queueAction === 'remove') game.removeQueuedDispatch(vehicleId, index)
+      if (queueAction === 'clear') game.clearDispatchQueue(vehicleId)
+      render()
+    })
   })
 }
 

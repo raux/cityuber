@@ -36,6 +36,47 @@ test('manual dispatch rejects an unknown stop', () => {
   assert.equal(game.dispatch('lift-a', 'b'), true)
 })
 
+test('human dispatch queues execute destinations in order', () => {
+  const queueScenario = {
+    ...scenario,
+    competition: { enabled: true },
+    requests: [],
+    vehicles: [{ ...scenario.vehicles[0], operator: 'human' }],
+  }
+  const game = new CityUberSimulation(queueScenario, null)
+  assert.equal(game.queueDispatch('lift-a', 'b'), true)
+  assert.equal(game.queueDispatch('lift-a', 'a'), true)
+  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'a'])
+
+  const atB = game.step()
+  assert.deepEqual(atB.vehicles[0].position, [1,0])
+  assert.deepEqual(atB.vehicles[0].dispatchQueue, ['a'])
+
+  const backAtA = game.step()
+  assert.deepEqual(backAtA.vehicles[0].position, [0,0])
+  assert.deepEqual(backAtA.vehicles[0].dispatchQueue, [])
+})
+
+test('human dispatch queues can be reordered, removed, cleared, and capped', () => {
+  const queueScenario = {
+    ...scenario,
+    competition: { enabled: true },
+    requests: [],
+    vehicles: [{ ...scenario.vehicles[0], operator: 'human' }],
+  }
+  const game = new CityUberSimulation(queueScenario, null)
+  assert.equal(game.queueDispatch('lift-a', 'b'), true)
+  assert.equal(game.queueDispatch('lift-a', 'a'), true)
+  assert.equal(game.queueDispatch('lift-a', 'b'), true)
+  assert.equal(game.moveQueuedDispatch('lift-a', 2, -1), true)
+  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'b', 'a'])
+  assert.equal(game.removeQueuedDispatch('lift-a', 0), true)
+  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'a'])
+  assert.equal(game.clearDispatchQueue('lift-a'), true)
+  for (let index = 0; index < 8; index += 1) assert.equal(game.queueDispatch('lift-a', 'b'), true)
+  assert.equal(game.queueDispatch('lift-a', 'b'), false)
+})
+
 test('competitive mode isolates human and AI dispatch control', () => {
   const competitiveScenario = {
     id: 'competition-control-test', name: 'Competition control test', width: 2, height: 1, duration: 4,

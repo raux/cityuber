@@ -1,5 +1,7 @@
 import { findRoute, roadConnections, roadKey, samePosition } from './routing.js'
 
+export const MAX_DISPATCH_QUEUE = 8
+
 export class CityUberSimulation {
   constructor(scenario, strategy) {
     this.scenario = structuredClone(scenario)
@@ -38,9 +40,11 @@ export class CityUberSimulation {
     this.waiting = []
     this.vehicles = this.scenario.vehicles.map((vehicle) => {
       const start = this.#stop(vehicle.startStop)
+      const operator = vehicle.operator ?? (this.competitionEnabled ? 'human' : 'system')
       return {
         ...structuredClone(vehicle),
-        operator: vehicle.operator ?? (this.competitionEnabled ? 'human' : 'system'),
+        operator,
+        dispatchQueue: operator === 'human' ? [] : undefined,
         position: [...start.position],
         currentStopId: start.id,
         targetStopId: null,
@@ -68,6 +72,55 @@ export class CityUberSimulation {
 
   setStrategy(strategy) {
     this.strategy = strategy
+  }
+
+  queueDispatch(vehicleId, stopId) {
+    const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
+    if (
+      !vehicle
+      || vehicle.operator !== 'human'
+      || vehicle.outOfService
+      || !this.stopById.has(stopId)
+      || vehicle.dispatchQueue.length >= MAX_DISPATCH_QUEUE
+    ) return false
+
+    vehicle.dispatchQueue.push(stopId)
+    return true
+  }
+
+  moveQueuedDispatch(vehicleId, index, direction) {
+    const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
+    if (
+      !vehicle
+      || vehicle.operator !== 'human'
+      || !Number.isInteger(index)
+      || ![-1, 1].includes(direction)
+    ) return false
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= vehicle.dispatchQueue.length) return false
+    const [stopId] = vehicle.dispatchQueue.splice(index, 1)
+    vehicle.dispatchQueue.splice(targetIndex, 0, stopId)
+    return true
+  }
+
+  removeQueuedDispatch(vehicleId, index) {
+    const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
+    if (
+      !vehicle
+      || vehicle.operator !== 'human'
+      || !Number.isInteger(index)
+      || index < 0
+      || index >= vehicle.dispatchQueue.length
+    ) return false
+    vehicle.dispatchQueue.splice(index, 1)
+    return true
+  }
+
+  clearDispatchQueue(vehicleId) {
+    const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
+    if (!vehicle || vehicle.operator !== 'human') return false
+    vehicle.dispatchQueue.length = 0
+    return true
   }
 
   dispatch(vehicleId, stopId, source = 'human') {
@@ -100,6 +153,9 @@ export class CityUberSimulation {
     this.#startTrafficEvents()
 
     for (const vehicle of this.vehicles) this.#serviceCurrentStop(vehicle)
+    for (const vehicle of this.vehicles.filter((candidate) => candidate.operator === 'human')) {
+      this.#dispatchNextQueuedStop(vehicle)
+    }
 
     const decisionState = this.snapshot()
     if (this.competitionEnabled) decisionState.vehicles = decisionState.vehicles.filter((vehicle) => vehicle.operator === 'ai')
@@ -187,6 +243,16 @@ export class CityUberSimulation {
       competition: this.#competitionSnapshot(),
       finished: this.isFinished(),
     })
+  }
+
+  #dispatchNextQueuedStop(vehicle) {
+    if (vehicle.outOfService || vehicle.route.length || vehicle.targetStopId) return
+
+    while (vehicle.dispatchQueue.length) {
+      const stopId = vehicle.dispatchQueue.shift()
+      if (!this.dispatch(vehicle.id, stopId, 'human')) continue
+      if (vehicle.route.length || vehicle.targetStopId) return
+    }
   }
 
   #spawnRequests() {
