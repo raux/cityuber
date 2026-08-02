@@ -201,7 +201,12 @@ h2 { font-size: 19px; }
 .dispatch-queue-card > header button { padding: 4px 7px; border: 1px solid #d8d4c7; border-radius: 5px; color: #6c5a39; background: white; cursor: pointer; font-size: 7px; font-weight: 700; }
 .dispatch-queue-card > header button:disabled { cursor: not-allowed; opacity: .45; }
 .dispatch-queue-card ol { display: grid; gap: 1px; max-height: 175px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.dispatch-queue-item { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; padding: 6px 8px; border-top: 1px solid #ece9df; }
+.dispatch-queue-item { display: grid; grid-template-columns: 28px 22px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 6px 8px; border-top: 1px solid #ece9df; transition: border-color .15s ease, background .15s ease, opacity .15s ease; }
+.queue-drag-handle { width: 28px; height: 28px; padding: 0; border: 1px solid #d6d9d2; border-radius: 6px; color: #6f7f79; background: white; cursor: grab; font-size: 11px; font-weight: 800; letter-spacing: -2px; touch-action: none; }
+.queue-drag-handle:active { cursor: grabbing; }
+.dispatch-queue-item.is-dragging { opacity: .58; background: #fff5dc; }
+.dispatch-queue-item.is-drop-target { border-color: var(--gold); background: #fff2cc; box-shadow: inset 0 0 0 2px rgba(240,173,79,.3); }
+.dispatch-queues.is-reordering { user-select: none; }
 .queue-order { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: #6f4b17; background: #f8dfb5; font-size: 8px; font-weight: 800; }
 .dispatch-queue-item strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .queue-edit-buttons { display: flex; gap: 3px; }
@@ -241,7 +246,8 @@ h2 { font-size: 19px; }
 @media (max-width: 780px) {
   .topbar { display: flex; flex-wrap: wrap; padding: 10px 13px; }
   .run-controls { margin-left: auto; }
-  .run-controls .button { padding: 0 9px; }
+  .run-controls .button { min-height: 44px; padding: 0 9px; }
+  .ai-mode { padding: 6px 8px; font-size: 7px; }
   .brand small, #pause-button { display: none; }
   .rival-scoreboard { grid-template-columns: 1fr 78px 1fr; }
   .rival-team { padding: 9px 11px; }
@@ -252,6 +258,12 @@ h2 { font-size: 19px; }
   .workspace { display: block; }
   .map-panel { padding: 17px 12px 11px; }
   .control-panel { border-top: 1px solid var(--line); border-left: 0; }
+  .manual-control { grid-template-columns: 1fr; align-items: stretch; }
+  .manual-control select, .manual-control button { min-height: 44px; }
+  .dispatch-queue-item { grid-template-columns: 42px 22px minmax(0, 1fr) auto; gap: 5px; padding: 8px; }
+  .queue-drag-handle { width: 40px; height: 40px; font-size: 14px; }
+  .queue-edit-buttons button { width: 40px; height: 40px; font-size: 16px; }
+  .dispatch-queue-card > header button { min-height: 40px; padding: 0 10px; }
   .section-heading { align-items: flex-start; }
   .legend { display: none; }
   h1 { font-size: 22px; }

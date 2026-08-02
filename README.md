@@ -12,7 +12,7 @@ Open [CityUber on GitHub Pages](https://raux.github.io/cityuber/).
 
 - Eight Port Moresby-inspired stops on a connected road network
 - Two human CityLifts controlled through immediate dispatch or editable eight-stop queues
-- Queue cards with reorder, remove, and clear controls
+- Mobile-friendly queue cards with touch drag-and-drop, reorder, remove, and clear controls
 - Adaptive rival AI that switches among energy-saving, balanced, traffic-aware, queue-surge, and catch-up behavior
 - Passenger calls, waiting, partial boarding, travel, and exiting
 - Traffic-aware routing, temporary congestion, traffic lights, and ambient cars
@@ -25,7 +25,7 @@ Open [CityUber on GitHub Pages](https://raux.github.io/cityuber/).
 
 ## Human versus AI
 
-The human player chooses every destination for H1 and H2 using the **Manual fleet dispatch** controls. A stop can be dispatched immediately or appended to that vehicle's ordered queue. The queue panel supports moving stops up or down, removing individual stops, and clearing a vehicle's route plan. Human vehicles execute queued stops in order but never select destinations themselves.
+The human player chooses every destination for H1 and H2 using the **Manual fleet dispatch** controls. A stop can be dispatched immediately or appended to that vehicle's ordered queue. The queue panel supports touch/mouse drag-and-drop, moving stops up or down, removing individual stops, and clearing a vehicle's route plan. Human vehicles execute queued stops in order but never select destinations themselves.
 
 The rival fleet is fully automated. Its deterministic adaptive strategy observes queue pressure, maximum waiting time, active traffic events, and the current competition score, then changes operating mode without using a remote model or service.
 

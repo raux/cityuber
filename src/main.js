@@ -14,6 +14,7 @@ let eventHistory = []
 const animatedPassengerEvents = new Set()
 let vehiclePoses = new Map()
 let trafficCarPoses = new Map()
+let queueDrag = null
 
 const elements = {
   map: document.querySelector('#city-map'),
@@ -38,6 +39,7 @@ const elements = {
   manualControls: document.querySelector('#manual-controls'),
   dispatchQueues: document.querySelector('#dispatch-queues'),
   dispatchQueueCount: document.querySelector('#dispatch-queue-count'),
+  queueDragStatus: document.querySelector('#queue-drag-status'),
   aiMode: document.querySelector('#ai-mode'),
   waitingList: document.querySelector('#waiting-list'),
   waitingCount: document.querySelector('#waiting-count'),
@@ -409,13 +411,16 @@ function renderDispatchQueues(state) {
   const humanVehicles = state.vehicles.filter((vehicle) => vehicle.operator === 'human')
   const totalQueued = humanVehicles.reduce((total, vehicle) => total + vehicle.dispatchQueue.length, 0)
   elements.dispatchQueueCount.textContent = totalQueued
+  if (queueDrag) return
+
   elements.dispatchQueues.innerHTML = humanVehicles.map((vehicle, vehicleIndex) => {
     const label = vehicleTeamLabel(vehicle, state.vehicles.indexOf(vehicle))
     const queueItems = vehicle.dispatchQueue.map((stopId, index) => {
       const stop = state.scenario.stops.find((candidate) => candidate.id === stopId)
       const stopName = stop?.name ?? stopId
       return `
-        <li class="dispatch-queue-item">
+        <li class="dispatch-queue-item" data-queue-item data-vehicle-id="${escapeHtml(vehicle.id)}" data-queue-index="${index}">
+          <button type="button" class="queue-drag-handle" data-queue-drag-handle aria-label="Drag ${escapeHtml(stopName)} to reorder">⋮⋮</button>
           <span class="queue-order">${index + 1}</span>
           <strong>${escapeHtml(stopName)}</strong>
           <span class="queue-edit-buttons">
@@ -446,6 +451,80 @@ function renderDispatchQueues(state) {
       render()
     })
   })
+
+  elements.dispatchQueues.querySelectorAll('[data-queue-drag-handle]').forEach((handle) => {
+    handle.addEventListener('pointerdown', beginQueueDrag)
+    handle.addEventListener('pointermove', updateQueueDrag)
+    handle.addEventListener('pointerup', (event) => finishQueueDrag(event, true))
+    handle.addEventListener('pointercancel', (event) => finishQueueDrag(event, false))
+    handle.addEventListener('lostpointercapture', (event) => finishQueueDrag(event, false))
+  })
+}
+
+function beginQueueDrag(event) {
+  if (queueDrag || event.button !== 0) return
+
+  const item = event.currentTarget.closest('[data-queue-item]')
+  const vehicleId = item.dataset.vehicleId
+  const fromIndex = Number(item.dataset.queueIndex)
+  const vehicle = game.snapshot().vehicles.find((candidate) => candidate.id === vehicleId)
+  if (!vehicle || !Number.isInteger(fromIndex)) return
+
+  event.preventDefault()
+  queueDrag = {
+    pointerId: event.pointerId,
+    vehicleId,
+    fromIndex,
+    toIndex: fromIndex,
+    queueVersion: vehicle.dispatchQueueVersion,
+    item,
+    target: item,
+  }
+  item.classList.add('is-dragging', 'is-drop-target')
+  elements.dispatchQueues.classList.add('is-reordering')
+  elements.queueDragStatus.textContent = `Dragging queue position ${fromIndex + 1}.`
+  try {
+    event.currentTarget.setPointerCapture(event.pointerId)
+  } catch {
+    // Pointer capture is optional on older mobile browsers.
+  }
+}
+
+function updateQueueDrag(event) {
+  if (!queueDrag || event.pointerId !== queueDrag.pointerId) return
+  event.preventDefault()
+
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-queue-item]')
+  if (!target || target.dataset.vehicleId !== queueDrag.vehicleId) return
+
+  queueDrag.target?.classList.remove('is-drop-target')
+  queueDrag.target = target
+  queueDrag.toIndex = Number(target.dataset.queueIndex)
+  target.classList.add('is-drop-target')
+}
+
+function finishQueueDrag(event, shouldCommit) {
+  if (!queueDrag || event.pointerId !== queueDrag.pointerId) return
+  event.preventDefault()
+
+  const drag = queueDrag
+  queueDrag = null
+  drag.item.classList.remove('is-dragging')
+  drag.target?.classList.remove('is-drop-target')
+  elements.dispatchQueues.classList.remove('is-reordering')
+
+  const vehicle = game.snapshot().vehicles.find((candidate) => candidate.id === drag.vehicleId)
+  const unchanged = vehicle && vehicle.dispatchQueueVersion === drag.queueVersion
+
+  if (shouldCommit && unchanged && drag.fromIndex !== drag.toIndex) {
+    game.reorderQueuedDispatch(drag.vehicleId, drag.fromIndex, drag.toIndex)
+    elements.queueDragStatus.textContent = `Moved queued stop to position ${drag.toIndex + 1}.`
+  } else if (!unchanged) {
+    elements.queueDragStatus.textContent = 'The queue changed during the drag, so reordering was canceled.'
+  } else {
+    elements.queueDragStatus.textContent = 'Queue order unchanged.'
+  }
+  render()
 }
 
 function renderWaiting(state) {

@@ -38,11 +38,12 @@ Future stops use the bounded queue API:
 ```js
 game.queueDispatch(vehicleId, stopId)
 game.moveQueuedDispatch(vehicleId, index, direction)
+game.reorderQueuedDispatch(vehicleId, fromIndex, toIndex)
 game.removeQueuedDispatch(vehicleId, index)
 game.clearDispatchQueue(vehicleId)
 ```
 
-The engine verifies human ownership and known stops, caps each queue at eight destinations, and starts the next queued destination only when the current trip is complete. Queue order is deterministic and included in simulation snapshots. Human dispatch may safely replace a vehicle's current route.
+The engine verifies human ownership and known stops, caps each queue at eight destinations, and starts the next queued destination only when the current trip is complete. The UI uses Pointer Events and a drag handle for touch, mouse, and stylus reordering. Each vehicle exposes a monotonic queue version so a drop is canceled safely if execution or another edit changes the queue during the gesture. Queue order is deterministic and included in simulation snapshots. Human dispatch may safely replace a vehicle's current route.
 
 ## Adaptive rival AI
 

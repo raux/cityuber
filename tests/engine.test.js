@@ -47,31 +47,39 @@ test('human dispatch queues execute destinations in order', () => {
   assert.equal(game.queueDispatch('lift-a', 'b'), true)
   assert.equal(game.queueDispatch('lift-a', 'a'), true)
   assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'a'])
+  assert.equal(game.snapshot().vehicles[0].dispatchQueueVersion, 2)
 
   const atB = game.step()
   assert.deepEqual(atB.vehicles[0].position, [1,0])
   assert.deepEqual(atB.vehicles[0].dispatchQueue, ['a'])
+  assert.equal(atB.vehicles[0].dispatchQueueVersion, 3)
 
   const backAtA = game.step()
   assert.deepEqual(backAtA.vehicles[0].position, [0,0])
   assert.deepEqual(backAtA.vehicles[0].dispatchQueue, [])
+  assert.equal(backAtA.vehicles[0].dispatchQueueVersion, 4)
 })
 
 test('human dispatch queues can be reordered, removed, cleared, and capped', () => {
   const queueScenario = {
     ...scenario,
+    width: 3,
     competition: { enabled: true },
+    roads: [[0,0],[1,0],[2,0]],
+    stops: [...scenario.stops, { id: 'c', name: 'C', position: [2,0] }],
     requests: [],
     vehicles: [{ ...scenario.vehicles[0], operator: 'human' }],
   }
   const game = new CityUberSimulation(queueScenario, null)
   assert.equal(game.queueDispatch('lift-a', 'b'), true)
   assert.equal(game.queueDispatch('lift-a', 'a'), true)
-  assert.equal(game.queueDispatch('lift-a', 'b'), true)
+  assert.equal(game.queueDispatch('lift-a', 'c'), true)
   assert.equal(game.moveQueuedDispatch('lift-a', 2, -1), true)
-  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'b', 'a'])
+  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'c', 'a'])
+  assert.equal(game.reorderQueuedDispatch('lift-a', 0, 2), true)
+  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['c', 'a', 'b'])
   assert.equal(game.removeQueuedDispatch('lift-a', 0), true)
-  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['b', 'a'])
+  assert.deepEqual(game.snapshot().vehicles[0].dispatchQueue, ['a', 'b'])
   assert.equal(game.clearDispatchQueue('lift-a'), true)
   for (let index = 0; index < 8; index += 1) assert.equal(game.queueDispatch('lift-a', 'b'), true)
   assert.equal(game.queueDispatch('lift-a', 'b'), false)

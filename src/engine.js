@@ -45,6 +45,7 @@ export class CityUberSimulation {
         ...structuredClone(vehicle),
         operator,
         dispatchQueue: operator === 'human' ? [] : undefined,
+        dispatchQueueVersion: operator === 'human' ? 0 : undefined,
         position: [...start.position],
         currentStopId: start.id,
         targetStopId: null,
@@ -85,21 +86,32 @@ export class CityUberSimulation {
     ) return false
 
     vehicle.dispatchQueue.push(stopId)
+    vehicle.dispatchQueueVersion += 1
     return true
   }
 
   moveQueuedDispatch(vehicleId, index, direction) {
+    if (![-1, 1].includes(direction)) return false
+    return this.reorderQueuedDispatch(vehicleId, index, index + direction)
+  }
+
+  reorderQueuedDispatch(vehicleId, fromIndex, toIndex) {
     const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
     if (
       !vehicle
       || vehicle.operator !== 'human'
-      || !Number.isInteger(index)
-      || ![-1, 1].includes(direction)
+      || !Number.isInteger(fromIndex)
+      || !Number.isInteger(toIndex)
+      || fromIndex < 0
+      || fromIndex >= vehicle.dispatchQueue.length
+      || toIndex < 0
+      || toIndex >= vehicle.dispatchQueue.length
     ) return false
-    const targetIndex = index + direction
-    if (targetIndex < 0 || targetIndex >= vehicle.dispatchQueue.length) return false
-    const [stopId] = vehicle.dispatchQueue.splice(index, 1)
-    vehicle.dispatchQueue.splice(targetIndex, 0, stopId)
+    if (fromIndex === toIndex) return true
+
+    const [stopId] = vehicle.dispatchQueue.splice(fromIndex, 1)
+    vehicle.dispatchQueue.splice(toIndex, 0, stopId)
+    vehicle.dispatchQueueVersion += 1
     return true
   }
 
@@ -113,13 +125,17 @@ export class CityUberSimulation {
       || index >= vehicle.dispatchQueue.length
     ) return false
     vehicle.dispatchQueue.splice(index, 1)
+    vehicle.dispatchQueueVersion += 1
     return true
   }
 
   clearDispatchQueue(vehicleId) {
     const vehicle = this.vehicles.find((candidate) => candidate.id === vehicleId)
     if (!vehicle || vehicle.operator !== 'human') return false
-    vehicle.dispatchQueue.length = 0
+    if (vehicle.dispatchQueue.length) {
+      vehicle.dispatchQueue.length = 0
+      vehicle.dispatchQueueVersion += 1
+    }
     return true
   }
 
@@ -250,6 +266,7 @@ export class CityUberSimulation {
 
     while (vehicle.dispatchQueue.length) {
       const stopId = vehicle.dispatchQueue.shift()
+      vehicle.dispatchQueueVersion += 1
       if (!this.dispatch(vehicle.id, stopId, 'human')) continue
       if (vehicle.route.length || vehicle.targetStopId) return
     }
